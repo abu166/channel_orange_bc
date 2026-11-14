@@ -1,4 +1,4 @@
-import { RUBRIC_VERSION, type Assessment, type Claim, type EvidenceSource, type Stance } from "./types";
+import { RUBRIC_VERSION, type Assessment, type Claim, type EvidenceSource, type Stance, type Verdict } from "./types";
 import { ENTITIES, isNegatedClaim, keywords, type Entity } from "./extract";
 import type { RawArticle } from "./pubmed";
 import { pubmedUrl } from "./pubmed";
@@ -121,6 +121,18 @@ export function toEvidence(a: RawArticle, claim: Claim, via: EvidenceSource["ret
 export const isRelevant = (e: EvidenceSource) => e.relevance >= 0.99 || (e.relevance >= 0.66 && e.design_weight >= 4);
 
 /* ---------- verdict (spec §5.4) ---------- */
+/**
+ * The AI writes its summary before the rubric decides, so the two can disagree ("Supported" over "evidence isn't
+ * conclusive"). The verdict always wins: a summary that reads the other way is replaced by the rubric's own line.
+ */
+export function fitsVerdict(text: string, verdict: Verdict): boolean {
+  const hedged = /\b(not|isn'?t|aren'?t|no)\s+(yet\s+)?(conclusive|clear|proven|supported|enough|strong|convincing|consistent)|\b(inconclusive|unclear|unproven|myth|false|mixed|insufficient|weak evidence|limited evidence|little evidence|no evidence|doesn'?t|does not|don'?t|do not)\b/i;
+  const negative = /\b(no|not|doesn'?t|does not|don'?t|do not|isn'?t|aren'?t|myth|false|against|opposite|fails?|failed|unlikely|worse|harm)\b/i;
+  if (verdict === "supported") return !hedged.test(text);
+  if (verdict === "contradicted") return negative.test(text);
+  return true;
+}
+
 export function assess(
   claim: Claim, evidence: EvidenceSource[],
   opts: { retrievalComplete: boolean; queries: string[]; model?: string; aiUsed?: boolean; bottomLine?: string | null; explainer?: string | null },
@@ -207,7 +219,7 @@ export function assess(
   return {
     claim_id: claim.claim_id, verdict, confidence_score: Math.round(confidence * 100) / 100,
     confidence_interpretation: "uncalibrated_internal_score", summary,
-    bottom_line: opts.retrievalComplete && opts.bottomLine && verdict !== "insufficient_evidence" ? opts.bottomLine : line,
+    bottom_line: opts.retrievalComplete && opts.bottomLine && verdict !== "insufficient_evidence" && fitsVerdict(opts.bottomLine, verdict) ? opts.bottomLine : line,
     plain_explainer: opts.explainer ?? null, strength_label, ai_used: !!opts.aiUsed,
     supporting_source_ids: rel.filter((e) => e.stance === "supports").map((e) => e.pmid),
     contradictory_source_ids: rel.filter((e) => e.stance === "contradicts").map((e) => e.pmid),

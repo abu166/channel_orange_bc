@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Loader2, Sparkles } from "lucide-react";
+import { Check, Loader2, ScanSearch } from "lucide-react";
 import { Reveal } from "@/components/ui";
 import SlotPicker from "@/components/SlotPicker";
 import { assessLabValue, extractLabValues, SAMPLE_REPORT, type LabValue } from "@/lib/labs";
@@ -144,7 +144,7 @@ export default function LabsPage() {
         <div><h2 ref={heading} tabIndex={-1} className="display text-3xl">Your results.</h2><p className="mt-3 max-w-[65ch] text-base text-muted">Compare with your report. Tap Edit on anything that is wrong.</p></div>
         <div className="flex flex-wrap gap-x-10 gap-y-2 border-y border-line">{[{ count: outside, label: "Outside the lab’s range", color: "text-danger" }, { count: rows.filter(needsLook).length, label: "Need a look", color: "text-warning" }, { count: rows.filter(r => r.flag === "in_range" && !needsLook(r)).length, label: "In the lab’s range", color: "text-success" }].filter(item => item.count || item.color !== "text-warning").map(item => <div key={item.label} className="flex items-baseline gap-3 py-3"><p className={`text-2xl font-medium tabular-nums ${item.color}`}>{item.count}</p><p className="text-base">{item.label}</p></div>)}</div>
         {aiBusy ? <p role="status" className="flex items-center gap-2 text-base"><Loader2 size={18} className="animate-spin text-burgundy" aria-hidden="true" />{aiBusy === "extract" ? "AI is checking the report for values the reader missed…" : "AI is writing a plain-English line for each result…"}</p>
-          : explained ? <p className="flex items-start gap-2 text-base text-muted"><Sparkles size={18} className="mt-0.5 shrink-0 text-burgundy" aria-hidden="true" />{aiFound ? `AI found ${aiFound} ${aiFound === 1 ? "value" : "values"} the reader missed and explained every result.` : "AI explained every result in plain English."} It does not diagnose.</p>
+          : explained ? <p className="flex items-start gap-2 text-base text-muted"><ScanSearch size={18} className="mt-0.5 shrink-0 text-burgundy" aria-hidden="true" />{aiFound ? `AI found ${aiFound} ${aiFound === 1 ? "value" : "values"} the reader missed and explained every result.` : "AI explained every result in plain English."} It does not diagnose.</p>
           : aiNote ? <p role="status" className="text-base text-muted">{aiNote}</p> : null}
         {!!outside && <p className="max-w-[65ch] rounded-md border border-partial/25 p-4 text-base">Some values may need prompt attention. If you feel unwell, contact your doctor today or call 911 in an emergency.</p>}
         {([["Outside the lab’s range", rows.filter(r => r.flag === "low" || r.flag === "high")], ["Need a look", rows.filter(r => r.flag !== "low" && r.flag !== "high" && needsLook(r))], ["In the lab’s range", rows.filter(r => r.flag === "in_range" && !needsLook(r))]] as const).filter(([, list]) => list.length).map(([title, list]) => <section key={title} aria-label={title}>
@@ -155,7 +155,7 @@ export default function LabsPage() {
             const bar = r.ref_low !== null && r.ref_high !== null && r.ref_high > r.ref_low && /^[-+]?\d+(\.\d+)?$/.test(r.value);
             return <li key={r.id} className="py-4">
               <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
-                <p className="text-lg font-medium">{r.biomarker}{isAi(r) && <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-line px-2 align-middle text-base font-normal text-muted"><Sparkles size={14} aria-hidden="true" />Found by AI</span>}</p>
+                <p className="text-lg font-medium">{r.biomarker}{isAi(r) && <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-line px-2 align-middle text-base font-normal text-muted"><ScanSearch size={14} aria-hidden="true" />Found by AI</span>}</p>
                 <div className="flex items-center gap-4"><p className="tabular-nums"><span className={`text-lg font-medium ${tone}`}>{r.value}</span> <span className="text-base text-muted">{r.unit}</span></p><button className="text-base underline" aria-expanded={editing === r.id} onClick={() => setEditing(editing === r.id ? null : r.id)}>{editing === r.id ? "Done" : "Edit"}</button></div>
               </div>
               <div className="mt-1 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-base">
