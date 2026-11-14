@@ -194,6 +194,11 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
     <motion.article id={`claim-${index}`}
       className="relative scroll-mt-24 border-t border-line bg-surface">
 
+      {/* 1 · the claim */}
+      <div className="relative px-5 pt-6 sm:px-8 sm:pt-8">
+        <h3 className="display text-3xl sm:text-[2.6rem]">“{claim.normalized_text}”</h3>
+      </div>
+
       {/* 2 · the answer */}
       <div className="relative mt-6 border-y border-line px-5 py-7 sm:px-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -210,27 +215,22 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
         {!a.retrieval_complete && <p className="mt-4 flex items-start gap-2 text-base text-misleading"><AlertTriangle size={16} className="mt-0.5 shrink-0" /> Search incomplete: PubMed failed; evidence remains unassessed.</p>}
       </div>
 
-      {/* 1 · the claim */}
-      <div className="relative px-5 pt-6 sm:px-8 sm:pt-8">
-        
-        <h3 className="display text-3xl sm:text-[2.6rem]">“{claim.normalized_text}”</h3>
-      </div>
-
-
-      {["misleading", "contradicted", "insufficient_evidence", "partially_supported"].includes(a.verdict) && (
-        <section className="border-b border-line px-5 py-5 sm:px-8">
-          <h4 className="mb-3 text-base font-medium">Money kept</h4>
-          <SavingsPrompt label={claim.normalized_text} />
-        </section>
-      )}
       <div className="relative space-y-6 px-5 pb-6 pt-6 sm:px-8 sm:pb-8">
+        {evidence.length === 0 ? (
+          <div className="space-y-2 text-base">
+            <p>{a.retrieval_complete ? "No published human studies matched this claim." : "The search is incomplete; evidence could not be assessed."}</p>
+            {a.retrieval_complete && <p className="text-muted">A confident claim with no research behind it is a red flag.</p>}
+            {a.queries[0] && <a href={`https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(a.queries[0])}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm text-rose underline underline-offset-4">Search PubMed yourself</a>}
+          </div>
+        ) : (
+          <>
         {/* 3 · the numbers */}
         <table className="w-full table-fixed border-y border-line text-left tabular-nums" aria-label="Study directions">
           <thead><tr>{["Agree", "No effect / opposite", "Unclear"].map(label => <th key={label} scope="col" className="px-2 pt-4 text-sm font-medium text-muted">{label}</th>)}</tr></thead>
           <tbody><tr>{(Object.keys(STANCE) as Stance[]).map(s => <td key={s} className="px-2 pb-3"><button aria-label={`Filter: ${STANCE[s].label}`} aria-pressed={filter === s} onClick={() => setFilter(filter === s ? "all" : s)} className={`min-h-11 w-full text-left text-3xl tabular-nums ${filter === s ? "text-burgundy underline underline-offset-4" : "text-ink"}`}>{count(s)}</button></td>)}</tr></tbody>
         </table>
 
-        <Ladder evidence={evidence} onPick={pick} />
+        {evidence.length >= 3 && <Ladder evidence={evidence} onPick={pick} />}
 
         {/* 4 · the studies */}
         <div>
@@ -246,12 +246,15 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
             <AnimatePresence mode="popLayout">
               {list.length ? list.map((e) => <StudyRow key={e.pmid} e={e} number={evidence.indexOf(e) + 1} open={openId === e.pmid} onToggle={() => setOpenId(openId === e.pmid ? null : e.pmid)} />) : (
                 <motion.li key="empty" className="rounded-[10px] border border-dashed border-line p-6 text-center text-base text-muted">
-                  {evidence.length ? "No studies in this group." : a.retrieval_complete ? "No matching studies were retrieved for this claim." : "The search is incomplete; evidence could not be assessed."}
+                  No studies in this group.
                 </motion.li>
               )}
             </AnimatePresence>
           </ul>
         </div>
+
+          </>
+        )}
 
         <details className="border-t border-line py-4"><summary className="min-h-11 cursor-pointer text-base font-medium">Details</summary>
         {a.plain_explainer && (
@@ -301,6 +304,7 @@ export default function ReportView({ thread, onRecheck, rechecking }: { thread: 
   const report = thread.versions[Math.min(vi, thread.versions.length - 1)];
   const prev = vi > 0 ? thread.versions[vi - 1] : null;
   const changed = prev && report.claims.some((c, i) => prev.claims[i] && prev.claims[i].assessment.verdict !== c.assessment.verdict);
+  const savingsClaim = report.claims.find((c) => ["misleading", "contradicted", "insufficient_evidence", "partially_supported"].includes(c.assessment.verdict));
   const studies = report.claims.reduce((n, c) => n + c.evidence.length, 0);
   return (
     <div className="space-y-6">
@@ -329,6 +333,12 @@ export default function ReportView({ thread, onRecheck, rechecking }: { thread: 
         {report.warnings.map((w) => <p key={w} className="mt-3 flex items-start gap-2 text-base text-partial"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{w}</p>)}
       </div>
       {report.claims.map((c, i) => <ClaimCard key={c.claim.claim_id} r={c} index={i} threadId={thread.id} />)}
+      {savingsClaim && (
+        <section className="border-y border-line px-5 py-5 sm:px-8">
+          <h4 className="mb-3 text-base font-medium">Money kept</h4>
+          <SavingsPrompt key={`${report.id}-${savingsClaim.claim.claim_id}`} label={savingsClaim.claim.normalized_text} />
+        </section>
+      )}
     </div>
   );
 }

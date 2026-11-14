@@ -57,7 +57,11 @@ export async function POST(req: Request) {
             const versus = q.comparator ? await esearch(q.comparator, 4) : [];
             send({ type: "stage", stage: "contradict", message: `Found ${new Set([...primary, ...quality, ...versus]).size} candidates. Now hunting for studies that found NO effect`, claimIndex: i });
             const contra = await esearch(q.contradiction, 5);
-            const ids = [...new Set([...quality, ...versus, ...primary, ...contra])].slice(0, 16);
+            let ids = [...new Set([...quality, ...versus, ...primary, ...contra])].slice(0, 16);
+            if (ids.length === 0) {
+              send({ type: "stage", stage: "search", message: "No exact matches. Widening the search with PubMed's subject headings", claimIndex: i });
+              ids = (await esearch(q.broad, 10)).slice(0, 10);
+            }
             for (const a of await efetch(ids)) byId.set(a.pmid, toEvidence(a, claim, contra.includes(a.pmid) && ![...primary, ...quality, ...versus].includes(a.pmid) ? "contradiction" : "primary"));
           } catch (err) {
             complete = false;

@@ -237,11 +237,16 @@ export function keywords(t: string): string[] {
 }
 
 /** Turns an AI-extracted claim into a validated Claim: offsets must point at an exact span, otherwise it is flagged as a paraphrase. */
-export function claimFromAi(input: string, c: { verbatim: string; normalized: string; intervention: string; outcome: string; claim_type?: string }): Claim {
+export function claimFromAi(input: string, c: { verbatim: string; normalized: string; intervention: string; outcome: string; intervention_terms?: string[]; outcome_terms?: string[]; claim_type?: string }): Claim {
   const at = c.verbatim ? input.indexOf(c.verbatim) : -1;
   const norm = clean(c.normalized).replace(/[.!;]+$/, "");
   const ents = findEntities(`${norm} ${c.intervention} ${c.outcome}`);
-  const term = (label: string) => { const hit = findEntities(label)[0]; return { label: label.toLowerCase(), q: hit ? hit.q : label.replace(/["()\[\]]/g, "") }; };
+  // OR-list of the label, its dictionary synonyms and the AI's PubMed vocabulary (deduped, max 5).
+  const term = (label: string, extra: string[] = []) => {
+    const hit = findEntities(label)[0];
+    const pool = [label, ...(hit ? hit.q.split(" OR ") : []), ...extra].map((t) => String(t).replace(/["()\[\]]/g, "").trim().toLowerCase()).filter((t) => t.length > 1 && t.length < 60);
+    return { label: label.toLowerCase(), q: [...new Set(pool)].slice(0, 5).join(" OR ") };
+  };
   const qualifiers = Object.fromEntries((Object.keys(QUAL) as (keyof Qualifiers)[]).map((k) => [k, norm.match(QUAL[k])?.[0] ?? null])) as unknown as Qualifiers;
   const types: Claim["claim_type"][] = ["efficacy", "safety", "prevention", "mechanism", "dosage", "diagnosis"];
   const claim_type = types.includes(c.claim_type as Claim["claim_type"]) ? (c.claim_type as Claim["claim_type"]) : typeOf(norm);
@@ -255,6 +260,6 @@ export function claimFromAi(input: string, c: { verbatim: string; normalized: st
     domain, claim_type, entities: [...new Set([c.intervention.toLowerCase(), c.outcome.toLowerCase(), ...ents.map((e) => e.name)])].filter(Boolean).slice(0, 4),
     qualifiers, missing_qualifiers: missing, overclaim_terms: [...new Set((norm.match(OVERCLAIM) ?? []).map((x) => x.toLowerCase()))],
     source_offsets: at >= 0 ? { start: at, end: at + c.verbatim.length } : { start: 0, end: 0 }, is_paraphrase: at < 0,
-    extraction_confidence: at >= 0 ? 0.85 : 0.6, comparator: comparatorOf(norm), search_terms: [term(c.intervention), term(c.outcome)].filter((t) => t.label), extracted_by: "ai",
+    extraction_confidence: at >= 0 ? 0.85 : 0.6, comparator: comparatorOf(norm), search_terms: [term(c.intervention, c.intervention_terms ?? []), term(c.outcome, c.outcome_terms ?? [])].filter((t) => t.label), extracted_by: "ai",
   };
 }

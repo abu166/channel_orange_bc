@@ -73,13 +73,13 @@ async function chatJSON<T>(system: string, user: string, timeoutMs = 20_000): Pr
   return null;
 }
 
-export interface AiClaim { verbatim: string; normalized: string; intervention: string; outcome: string; claim_type?: string }
+export interface AiClaim { verbatim: string; normalized: string; intervention: string; outcome: string; intervention_terms?: string[]; outcome_terms?: string[]; claim_type?: string }
 
 /** Claim extraction for messy captions/transcripts. Output is validated and enriched by lib/extract.ts. */
 export async function aiExtract(text: string): Promise<AiClaim[] | null> {
   const out = await chatJSON<{ claims?: AiClaim[] }>(
     "You extract checkable health claims from social-media text for a fact-checking tool. Reply with JSON only.",
-    `Text:\n"""${text.slice(0, 4000)}"""\n\nReturn {"claims":[{"verbatim":"exact substring copied from the text","normalized":"one atomic claim in plain English, keeping any dose, population or duration","intervention":"short PubMed search term for the thing (e.g. rosemary oil)","outcome":"short PubMed search term for the effect (e.g. alopecia)","claim_type":"efficacy|safety|prevention|mechanism|dosage|diagnosis"}]}.\nRules: split compound sentences into separate claims; skip questions, jokes, opinions without a factual health assertion, ads and non-health statements; use medical terms for search fields; at most 5 claims; empty list if none.`,
+    `Text:\n"""${text.slice(0, 4000)}"""\n\nReturn {"claims":[{"verbatim":"exact substring copied from the text","normalized":"one atomic claim in plain English, keeping any dose, population or duration","intervention":"1-3 word name of the thing (e.g. soda)","outcome":"1-3 word name of the effect (e.g. waist size)","intervention_terms":["2-4 synonyms scientists use in PubMed titles/MeSH, short, no quotes (e.g. sugar-sweetened beverages, soft drinks, soda)"],"outcome_terms":["2-4 PubMed synonyms (e.g. waist circumference, abdominal obesity, visceral fat)"],"claim_type":"efficacy|safety|prevention|mechanism|dosage|diagnosis"}]}.\nRules: split compound sentences into separate claims; skip questions, jokes, opinions without a factual health assertion, ads and non-health statements; search terms must be the vocabulary researchers actually use (MeSH-style), never whole phrases like "soda consumption"; at most 5 claims; empty list if none.`,
   );
   if (!out?.claims || !Array.isArray(out.claims)) return null;
   return out.claims.filter((c) => c && typeof c.normalized === "string" && typeof c.intervention === "string" && c.normalized.length > 5).slice(0, 5);

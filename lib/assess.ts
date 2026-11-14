@@ -16,7 +16,8 @@ export function claimTerms(claim: Claim): { label: string; q: string }[] {
   return terms.slice(0, 3);
 }
 
-const tiab = (q: string) => `(${q.split(" OR ").map((x) => `"${x.trim()}"[tiab]`).join(" OR ")})`;
+// [tw] = text words: title, abstract and MeSH headings, so "soft drinks" also finds papers indexed under "Carbonated Beverages".
+const tiab = (q: string) => `(${q.split(" OR ").map((x) => `"${x.trim()}"[tw]`).join(" OR ")})`;
 
 export function buildQueries(claim: Claim) {
   const core = claimTerms(claim).map((t) => tiab(t.q)).join(" AND ");
@@ -25,6 +26,8 @@ export function buildQueries(claim: Claim) {
     quality: `${core} AND ${QUALITY}`,
     contradiction: `${core} AND ${NULL_CUES} ${HUMAN}`,
     comparator: claim.comparator ? `${core} AND ${tiab(claim.comparator)}` : null,
+    // Used only when the strict searches find nothing: PubMed's automatic term mapping, no field tags.
+    broad: `${claimTerms(claim).map((t) => `(${t.q.split(" OR ").map((x) => x.trim()).join(" OR ")})`).join(" AND ")} ${HUMAN}`,
   };
 }
 
