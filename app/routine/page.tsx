@@ -72,8 +72,9 @@ export default function RoutinePage() {
   const [time,setTime]=useState<RoutineProduct["timeOfDay"]>("pm"); const [text,setText]=useState("");
   const [ocr,setOcr]=useState<{status:"idle"|"pending"|"success"|"error";message:string;progress:number}>({status:"idle",message:"",progress:0});
   const input=useRef<HTMLInputElement>(null); const lastFile=useRef<File|null>(null);
-  // First visit (nothing saved yet): start with the example shelf so the page shows how it works. A cleared shelf stays empty.
-  useEffect(()=>{try {const raw=localStorage.getItem("veto:routine");if(raw===null){setProducts(demo);}else{const saved=JSON.parse(raw);if(Array.isArray(saved)) setProducts(saved.filter(isProduct).map(p=>p.id.startsWith("demo-")?demo.find(d=>d.id===p.id)??p:p));}}catch {setStorageNote("Saved shelf unreadable. Add products again.");}setReady(true);},[]);
+  // An empty shelf gets the example shelf once (a one-time marker, because older versions saved an empty shelf on every
+  // visit). After that, a shelf the user cleared stays empty. Old demo entries take the current example names.
+  useEffect(()=>{try {const saved=JSON.parse(localStorage.getItem("veto:routine")??"[]");const list=Array.isArray(saved)?saved.filter(isProduct):[];if(!list.length&&localStorage.getItem("veto:shelf-example")!=="1"){localStorage.setItem("veto:routine",JSON.stringify(demo));localStorage.setItem("veto:shelf-example","1");setProducts(demo);}else setProducts(list.map(p=>p.id.startsWith("demo-")?demo.find(d=>d.id===p.id)??p:p));}catch {setStorageNote("Saved shelf unreadable. Add products again.");}setReady(true);},[]);
   useEffect(()=>{if(ready)try{localStorage.setItem("veto:routine",JSON.stringify(products));}catch{setStorageNote("Shelf not saved. Checks still work this visit.");}},[products,ready]);
   const isDemoShelf=products.length===demo.length && demo.every(d=>products.some(p=>p.id===d.id && p.name===d.name && p.type===d.type && p.timeOfDay===d.timeOfDay && p.ingredientsText===d.ingredientsText));
   const result=useMemo(()=>analyzeRoutine(products),[products]);
