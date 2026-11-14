@@ -9,7 +9,7 @@ interface Provider { name: string; kind: "openai" | "anthropic"; url: string; ke
 
 function provider(): Provider | null {
   const env = process.env;
-  if (env.GROQ_API_KEY) return { name: "groq", kind: "openai", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.AI_MODEL || "llama-3.3-70b-versatile" };
+  if (env.GROQ_API_KEY) return { name: "groq", kind: "openai", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.AI_MODEL || "auto" };
   if (env.GEMINI_API_KEY) return { name: "gemini", kind: "openai", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: env.GEMINI_API_KEY, model: env.AI_MODEL || "gemini-flash-latest" };
   if (env.OPENROUTER_API_KEY) return { name: "openrouter", kind: "openai", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: env.AI_MODEL || "meta-llama/llama-3.3-70b-instruct:free" };
   if (env.ANTHROPIC_API_KEY) return { name: "anthropic", kind: "anthropic", url: "https://api.anthropic.com/v1/messages", key: env.ANTHROPIC_API_KEY, model: env.AI_MODEL || "claude-haiku-5-5" };
@@ -17,15 +17,32 @@ function provider(): Provider | null {
 }
 
 export const llmEnabled = () => provider() !== null;
-export const llmModel = () => { const p = provider(); return p ? `${p.name}:${p.model}` : "none"; };
+export const llmModel = () => { const p = provider(); return p ? `${p.name}:${p.model === "auto" ? resolvedModel ?? "auto" : p.model}` : "none"; };
 
-async function callOnce(p: Provider, system: string, user: string, timeoutMs: number): Promise<string> {
+/** Groq model availability differs per account and changes over time: ask which models this key can use. */
+const PREFERRED = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"];
+let resolvedModel: string | null = null;
+async function resolveModel(p: Provider, force = false): Promise<string> {
+  if (p.model !== "auto") return p.model;
+  if (resolvedModel && !force) return resolvedModel;
+  const res = await fetch(p.url.replace("/chat/completions", "/models"), { headers: { authorization: `Bearer ${p.key}` }, signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`LLM models ${res.status}`);
+  const ids: string[] = ((await res.json())?.data ?? []).map((m: { id: string }) => m.id);
+  const chat = ids.filter((id) => !/whisper|guard|tts|orpheus|playai|prompt-guard|compound/i.test(id));
+  resolvedModel = PREFERRED.find((m) => ids.includes(m)) ?? chat[0] ?? null;
+  if (!resolvedModel) throw new Error("No chat model available for this key");
+  return resolvedModel;
+}
+
+async function callOnce(p: Provider, system: string, user: string, timeoutMs: number, retried = false): Promise<string> {
+  const model = await resolveModel(p);
   const res = p.kind === "anthropic"
     ? await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", "x-api-key": p.key, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: p.model, max_tokens: 1500, temperature: 0, system, messages: [{ role: "user", content: user }] }) })
+        body: JSON.stringify({ model, max_tokens: 1500, temperature: 0, system, messages: [{ role: "user", content: user }] }) })
     : await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", authorization: `Bearer ${p.key}` },
         body: JSON.stringify({
-          model: p.model, temperature: 0, max_tokens: 1500,
+          model, temperature: 0, max_tokens: 2000,
+          ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
           // Groq and OpenRouter support strict JSON mode; it guarantees a parseable object.
           ...(p.name === "groq" || p.name === "openrouter" ? { response_format: { type: "json_object" } } : {}),
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
@@ -34,7 +51,8 @@ async function callOnce(p: Provider, system: string, user: string, timeoutMs: nu
     // Log status + provider message only (never the key or user content) so failures are diagnosable.
     const detail = await res.text().catch(() => "");
     const msg = detail.match(/"message"\s*:\s*"([^"]{0,200})/)?.[1] ?? "";
-    console.warn(`[llm] ${p.name}:${p.model} HTTP ${res.status} ${msg}`);
+    console.warn(`[llm] ${p.name}:${model} HTTP ${res.status} ${msg}`);
+    if (res.status === 404 && p.model === "auto" && !retried) { resolvedModel = null; await resolveModel(p, true); return callOnce(p, system, user, timeoutMs, true); }
     throw new Error(`LLM ${res.status}: ${msg}`);
   }
   const data = await res.json();
@@ -95,9 +113,9 @@ export async function aiStatus(): Promise<{ provider: string; model: string; ok:
   const p = provider();
   if (!p) return { provider: "none", model: "none", ok: false, error: "No AI key configured" };
   try {
-    const text = await callOnce(p, "Reply with JSON only.", 'Return {"ok":true} as JSON.', 10_000);
-    return { provider: p.name, model: p.model, ok: /"ok"\s*:\s*true/.test(text), error: null };
+    const text = await callOnce(p, "Reply with JSON only.", 'Return {"ok":true} as JSON.', 15_000);
+    return { provider: p.name, model: resolvedModel ?? p.model, ok: /"ok"\s*:\s*true/.test(text), error: null };
   } catch (e) {
-    return { provider: p.name, model: p.model, ok: false, error: e instanceof Error ? e.message : "unknown error" };
+    return { provider: p.name, model: resolvedModel ?? p.model, ok: false, error: e instanceof Error ? e.message : "unknown error" };
   }
 }

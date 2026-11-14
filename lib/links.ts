@@ -58,3 +58,18 @@ export function extractTikTokCaption(html: string): { caption: string; handle: s
     return null;
   }
 }
+
+/** Reads the full description YouTube embeds in its public watch page (videoDetails.shortDescription), with the og:description tag as fallback. */
+export function extractYouTubeDescription(html: string): string | null {
+  const player = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\});\s*(?:var\s|<\/script>)/);
+  if (player) {
+    try {
+      const d = JSON.parse(player[1]);
+      const desc = d?.videoDetails?.shortDescription;
+      if (typeof desc === "string" && desc.trim()) return desc.trim().slice(0, 3000);
+    } catch { /* fall back to the preview tag */ }
+  }
+  const og = html.match(/<meta (?:property|name)="(?:og:description|description)" content="([^"]{3,})"/);
+  if (!og) return null;
+  return og[1].replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+}

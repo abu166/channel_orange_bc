@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
-import { extractTikTokCaption, parseVideoLink, tikTokEmbedSrc } from "../../../../../lib/links";
+import { extractTikTokCaption, extractYouTubeDescription, parseVideoLink, tikTokEmbedSrc } from "../../../../../lib/links";
 
 const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 const isTikTokHost = (u: string) => { try { const h = new URL(u).hostname; return h === "tiktok.com" || h.endsWith(".tiktok.com"); } catch { return false; } };
+
+/** YouTube: title comes from official oEmbed; the description from the public watch page (one request). */
+async function youTubeDescription(id: string | null) {
+  if (!id || process.env.YOUTUBE_PUBLIC_DESCRIPTIONS === "off") return null;
+  try {
+    const page = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(8000), cache: "no-store", headers: { "user-agent": BROWSER_UA, "accept-language": "en-US,en;q=0.9" } });
+    return page.ok ? extractYouTubeDescription(await page.text()) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Pilot (see lib/links.ts): one request to the public video page; short links are resolved first, hosts re-checked. */
 async function tikTokPublicCaption(url: string) {
@@ -46,7 +57,12 @@ export async function POST(request: Request) {
       const pub = await tikTokPublicCaption(link.url);
       return NextResponse.json({ platform: link.platform, text: pub?.caption ?? null, creator: pub?.handle ?? link.handle, embedSrc: tikTokEmbedSrc(data.html), source: pub ? "public_page_caption" : null });
     }
-    return NextResponse.json({ platform: link.platform, text: link.platform === "instagram" && typeof data.caption === "string" ? data.caption.trim() || title : title || null, creator, embedHtml: null });
+    if (link.platform === "youtube") {
+      const description = await youTubeDescription(link.id);
+      const text = [title, description].filter(Boolean).join("\n\n") || null;
+      return NextResponse.json({ platform: link.platform, text, creator, embedHtml: null, source: description ? "title_and_description" : "title" });
+    }
+    return NextResponse.json({ platform: link.platform, text: typeof data.caption === "string" ? data.caption.trim() || title : title || null, creator, embedHtml: null });
   } catch {
     return NextResponse.json({ error: "provider_unavailable", message: "The video provider could not respond. Retry, or drop the video or a screenshot." }, { status: 502 });
   }
