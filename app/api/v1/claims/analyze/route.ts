@@ -70,15 +70,22 @@ export async function POST(req: Request) {
           let evidence = [...byId.values()].filter(isRelevant).sort((a, b) => Number(b.counts_as_proof) - Number(a.counts_as_proof) || b.design_weight - a.design_weight).slice(0, 10);
           send({ type: "stage", stage: "assess", message: ai ? `AI is reading ${evidence.length} study conclusions; the rubric then weighs them by design` : `Weighing ${evidence.length} matching studies by design`, claimIndex: i });
           let refined: Awaited<ReturnType<typeof refineStances>> = null;
+          let hiddenOffTopic = 0;
           if (complete && ai && evidence.length) {
             refined = await refineStances(claim, evidence);
-            if (refined) evidence = evidence.map((e) => ({ ...e, stance: refined!.stances.get(e.pmid) ?? e.stance, ai_reason: refined!.reasons.get(e.pmid) ?? null }));
+            if (refined) {
+              evidence = evidence.map((e) => ({ ...e, stance: refined!.stances.get(e.pmid) ?? e.stance, ai_reason: refined!.reasons.get(e.pmid) ?? null }));
+              const kept = evidence.filter((e) => !refined!.offTopic.has(e.pmid));
+              hiddenOffTopic = evidence.length - kept.length;
+              evidence = kept;
+            }
             else warnings.push("AI study reader unavailable, so stances come from rule-based cues.");
           }
           const assessment = assess(claim, evidence, {
             retrievalComplete: complete, queries: [q.primary, q.quality, q.contradiction, ...(q.comparator ? [q.comparator] : [])],
             model: refined ? `rules-v2+${llmModel()}` : "rules-v2", aiUsed: !!refined, bottomLine: refined?.bottomLine, explainer: refined?.explainer,
           });
+          if (hiddenOffTopic > 0) assessment.limitations.unshift(`${hiddenOffTopic} retrieved ${hiddenOffTopic === 1 ? "study was" : "studies were"} off-topic (checked by AI) and hidden.`);
           const result = { claim, evidence, assessment };
           results.push(result);
           send({ type: "claim_done", index: i, result });

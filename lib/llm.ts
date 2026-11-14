@@ -79,33 +79,35 @@ export interface AiClaim { verbatim: string; normalized: string; intervention: s
 export async function aiExtract(text: string): Promise<AiClaim[] | null> {
   const out = await chatJSON<{ claims?: AiClaim[] }>(
     "You extract checkable health claims from social-media text for a fact-checking tool. Reply with JSON only.",
-    `Text:\n"""${text.slice(0, 4000)}"""\n\nReturn {"claims":[{"verbatim":"exact substring copied from the text","normalized":"one atomic claim in plain English, keeping any dose, population or duration","intervention":"1-3 word name of the thing (e.g. soda)","outcome":"1-3 word name of the effect (e.g. waist size)","intervention_terms":["2-4 synonyms scientists use in PubMed titles/MeSH, short, no quotes (e.g. sugar-sweetened beverages, soft drinks, soda)"],"outcome_terms":["2-4 PubMed synonyms (e.g. waist circumference, abdominal obesity, visceral fat)"],"claim_type":"efficacy|safety|prevention|mechanism|dosage|diagnosis"}]}.\nRules: split compound sentences into separate claims; skip questions, jokes, opinions without a factual health assertion, ads and non-health statements; search terms must be the vocabulary researchers actually use (MeSH-style), never whole phrases like "soda consumption"; at most 5 claims; empty list if none.`,
+    `Text:\n"""${text.slice(0, 4000)}"""\n\nReturn {"claims":[{"verbatim":"exact substring copied from the text","normalized":"one atomic claim in plain English, keeping any dose, population or duration","intervention":"1-3 word name of the thing (e.g. soda)","outcome":"1-3 word name of the effect (e.g. waist size)","intervention_terms":["2-4 synonyms scientists use in PubMed titles/MeSH, short, no quotes (e.g. sugar-sweetened beverages, soft drinks, soda)"],"outcome_terms":["2-4 PubMed synonyms (e.g. waist circumference, abdominal obesity, visceral fat)"],"claim_type":"efficacy|safety|prevention|mechanism|dosage|diagnosis"}]}.\nRules: split compound sentences into separate claims; skip questions, jokes, opinions without a factual health assertion, ads and non-health statements; search terms must be the vocabulary researchers actually use (MeSH-style), never whole phrases like "soda consumption", and must mean the SAME thing, never a broader category (lemon water is not "citrus"); at most 5 claims; empty list if none.`,
   );
   if (!out?.claims || !Array.isArray(out.claims)) return null;
   return out.claims.filter((c) => c && typeof c.normalized === "string" && typeof c.intervention === "string" && c.normalized.length > 5).slice(0, 5);
 }
 
 /** Reads retrieved conclusions only; returns stance per PMID plus plain-English copy. */
-export async function refineStances(claim: Claim, evidence: EvidenceSource[]): Promise<{ stances: Map<string, Stance>; reasons: Map<string, string>; bottomLine: string | null; explainer: string | null } | null> {
+export async function refineStances(claim: Claim, evidence: EvidenceSource[]): Promise<{ stances: Map<string, Stance>; reasons: Map<string, string>; offTopic: Set<string>; bottomLine: string | null; explainer: string | null } | null> {
   if (!evidence.length) return null;
   const sources = evidence.slice(0, 10).map((e) => `PMID ${e.pmid} [${e.study_design}, ${e.year}] ${e.title}\nConclusion: ${e.conclusion ?? "(no abstract)"}`).join("\n\n");
-  const out = await chatJSON<{ stances?: { pmid: string; stance: string; why?: string }[]; bottom_line?: string; explainer?: string }>(
+  const out = await chatJSON<{ stances?: { pmid: string; stance: string; why?: string; on_topic?: boolean }[]; bottom_line?: string; explainer?: string }>(
     "You are a careful evidence analyst explaining research to a non-scientist. Reply with JSON only. Never give medical advice or doses.",
     `Claim: "${claim.normalized_text}"\n\nSources:\n${sources}\n\nClaim type: ${claim.claim_type}${claim.comparator ? `; it compares against ${claim.comparator}` : ""}.
 For each PMID: "supports" if its conclusion backs the claim AS WORDED, "contradicts" if it found no effect or the opposite, "neutral" if off-topic, mixed, a different outcome, or no abstract.
-Rules: judge the exact outcome claimed (for "prevents" claims judge incidence/risk, not duration or severity); for harm claims ("X causes Y") lower risk or no association CONTRADICTS and higher risk SUPPORTS; animal, cell and narrative-review findings are "neutral" unless the claim is about them; a comparison claim needs a head-to-head study, otherwise "neutral". Add "why": max 14 plain words on what that study found (e.g. "Trial in 100 women: less wrinkling after 12 weeks").\nThen write "bottom_line": max 18 words a 30-year-old would get instantly (e.g. "Some small studies show a modest effect, but not a cure."), and "explainer": 2-3 short sentences on what the studies actually found, mentioning study types, using only these sources.\nReturn {"stances":[{"pmid":"…","stance":"…","why":"…"}],"bottom_line":"…","explainer":"…"}`,
+Rules: judge the exact outcome claimed (for "prevents" claims judge incidence/risk, not duration or severity); for harm claims ("X causes Y") lower risk or no association CONTRADICTS and higher risk SUPPORTS; animal, cell and narrative-review findings are "neutral" unless the claim is about them; a comparison claim needs a head-to-head study, otherwise "neutral". Add "on_topic": true only if the study tests the claim's intervention (or a direct equivalent) AND reports the claimed outcome, else false. Add "why": max 14 plain words on what that study found (e.g. "Trial in 100 women: less wrinkling after 12 weeks").\nThen write "bottom_line": max 18 words a 30-year-old would get instantly (e.g. "Some small studies show a modest effect, but not a cure."), and "explainer": 2-3 short sentences on what the studies actually found, mentioning study types, using only these sources.\nReturn {"stances":[{"pmid":"…","stance":"…","on_topic":true,"why":"…"}],"bottom_line":"…","explainer":"…"}`,
   );
   if (!out) return null;
   const allowed = new Set(evidence.map((e) => e.pmid));
   const stances = new Map<string, Stance>();
   const reasons = new Map<string, string>();
+  const offTopic = new Set<string>();
   for (const s of out.stances ?? []) {
+    if (allowed.has(String(s.pmid)) && s.on_topic === false) offTopic.add(String(s.pmid));
     if (!allowed.has(String(s.pmid)) || !["supports", "contradicts", "neutral"].includes(s.stance)) continue;
     stances.set(String(s.pmid), s.stance as Stance);
     if (typeof s.why === "string" && s.why.length < 160) reasons.set(String(s.pmid), s.why.trim());
   }
   const clean = (s: unknown, max: number) => (typeof s === "string" && s.length > 3 && s.length < max ? s.trim() : null);
-  return { stances, reasons, bottomLine: clean(out.bottom_line, 200), explainer: clean(out.explainer, 700) };
+  return { stances, reasons, offTopic, bottomLine: clean(out.bottom_line, 200), explainer: clean(out.explainer, 700) };
 }
 
 /** Health probe for /api/v1/ai/status: one tiny JSON call, reports provider, model and the provider's error text. */

@@ -117,8 +117,8 @@ function StudyRow({ e, number, open, onToggle }: { e: EvidenceSource; number: nu
         <span className="min-w-0 flex-1">
           <span className="block text-base font-medium leading-relaxed text-ink">{e.title}</span>
           <span className="mt-2 block text-base text-muted">{e.journal} · {e.year} · <Term t={e.study_design} /></span>
-          <span className="mt-2 block font-mono text-sm text-muted">PMID {e.pmid}</span>
-          <span className="mt-2 block text-base" style={{ color: c }}>{STANCE[e.stance].short}{!e.counts_as_proof ? " · does not count as proof" : ""}{e.retrieved_via === "contradiction" ? " · no-effect search" : ""}</span>
+          <span className="mt-2 block text-base" style={{ color: c }}><b>{STANCE[e.stance].short}</b>{!e.counts_as_proof ? " · does not count as proof" : ""}{e.retrieved_via === "contradiction" ? " · no-effect search" : ""}</span>
+          <span className="mt-1 block text-base text-ink/85">{line}</span>
 
         </span>
         <ChevronDown size={16} className="mt-1 shrink-0 text-muted" />
@@ -128,7 +128,7 @@ function StudyRow({ e, number, open, onToggle }: { e: EvidenceSource; number: nu
         {open && (
           <motion.div className="overflow-hidden">
             <div className="space-y-3 border-t border-line px-4 pb-4 pt-3 pl-10 text-base">
-              <p className="text-muted">{line}</p>
+              <p className="font-mono text-sm text-muted">PMID {e.pmid}</p>
               {e.conclusion && <p className="text-muted"><b className="text-fg/90">The authors conclude:</b> {e.conclusion}</p>}
               <p className="text-base text-muted">{e.doi && <span className="font-mono break-all">DOI {e.doi} · </span>}{e.rationale}</p>
             </div>
