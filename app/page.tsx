@@ -86,7 +86,7 @@ export default function Home() {
             <h1 className="display relative text-[clamp(3.1rem,7vw,5.75rem)]">
               <span className="sr-only">Check it before you buy it.</span>
               <span aria-hidden="true">Check it before you{" "}
-                <span className="pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap">{VERBS.map((v, i) => <span key={v} ref={el => { measure.current[i] = el; }} className="inline-block px-1 italic">{v}</span>)}</span>
+                <span className="pointer-events-none invisible absolute left-0 top-0 h-0 w-0 overflow-hidden whitespace-nowrap">{VERBS.map((v, i) => <span key={v} ref={el => { measure.current[i] = el; }} className="inline-block px-1 italic">{v}</span>)}</span>
                 <motion.span animate={widths[verb] ? { width: widths[verb] } : undefined} transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }} className="mark relative inline-flex overflow-hidden whitespace-nowrap align-baseline">
                   <AnimatePresence mode="popLayout" initial={false}>
                     <motion.span key={VERBS[verb]} initial={{ y: "90%", opacity: 0 }} animate={{ y: "0%", opacity: 1 }} exit={{ y: "-90%", opacity: 0 }} transition={{ duration: 0.38, ease: [0.2, 0.8, 0.2, 1] }} className="inline-block italic">
@@ -123,54 +123,65 @@ export default function Home() {
 
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="display text-4xl sm:text-5xl">The loop</h2>
-        <ol className="mt-10 grid md:grid-cols-4">
+        <ol className="mt-12 grid gap-0 md:grid-cols-4">
           {[
             { name: "Check", line: "Read the research behind a claim.", href: "/check", live: preview.verdict ? <VerdictBadge verdict={preview.verdict} /> : null, example: <VerdictBadge verdict="insufficient_evidence" /> },
             { name: "Shelf", line: "See your products and their overlaps.", href: "/shelf", live: preview.shelf, example: "4 products · $80/mo shelf cost" },
             { name: "Care", line: "Bring your questions to a clinician.", href: "/care", live: preview.care, example: "Lab consult · tomorrow, 10 am" },
             { name: "Ledger", line: "Keep your checks and money saved.", href: "/ledger", live: preview.money, example: "$240/year kept" },
-          ].map((step, i) => <li key={step.name} className="relative flex flex-col border-l border-line pb-8 pl-8 md:border-l-0 md:border-t md:pb-0 md:pl-0 md:pr-6 md:pt-8">
-            <span className="absolute -left-4 top-0 grid h-8 w-8 place-items-center rounded-md border border-line bg-cream text-base tabular-nums md:-top-4 md:left-0">{i + 1}</span>
+          ].map((step, i) => <li key={step.name} className="relative flex min-w-0 flex-col border-l border-blush pb-10 pl-8 last:pb-0 md:border-l-0 md:border-t md:pb-0 md:pl-0 md:pr-6 md:pt-10">
+            <span className="absolute -left-2 top-2 h-4 w-4 rounded-full border border-rose bg-cream md:-top-2 md:left-0" aria-hidden="true" />
+            <div className="mb-4 flex items-center gap-3 text-rose" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                {i === 0 ? <><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></> : i === 1 ? <><path d="m12 3 10 5-10 5L2 8Z" /><path d="m2 12 10 5 10-5M2 16l10 5 10-5" /></> : i === 2 ? <><path d="M6 3H3v5a5 5 0 0 0 10 0V3h-3M8 13v3a5 5 0 0 0 10 0v-3" /><circle cx="18" cy="10" r="3" /></> : <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /><path d="M10 2v8l3-2 3 2V2" /></>}
+              </svg>
+              <span className="eyebrow tabular-nums">0{i + 1}</span>
+            </div>
             <h3 className="display text-3xl">{step.name}</h3>
-            <p className="mt-3 text-base text-muted">{step.line}</p>
-            <div className="mt-5 flex-1 text-base" aria-live="polite">{!preview.ready ? "Loading your device preview…" : <>{!step.live && <span className="mb-2 block text-base text-muted">Example</span>}{step.live || step.example}</>}</div>
-            <Link href={step.href} className="mt-4 inline-flex min-h-11 items-center gap-2 text-base text-burgundy">Open {step.name} <ArrowRight size={16} /></Link>
+            <p className="mt-3 text-base text-muted md:min-h-14">{step.line}</p>
+            <div className="mt-6 min-h-28 break-words rounded-md border border-line bg-surface p-4 text-base [&_.chip]:text-base [&>span]:max-w-full" aria-live="polite">{!preview.ready ? "Loading your device preview…" : <>{!step.live && <span className="eyebrow mb-2 block">Example</span>}{step.live || step.example}</>}</div>
+            <Link href={step.href} className="mt-4 inline-flex min-h-11 items-center gap-2 self-start text-base text-burgundy">Open {step.name} <ArrowRight size={16} /></Link>
           </li>)}
         </ol>
       </section>
       <section className="bg-burgundy text-cream">
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 md:grid-cols-2">
-          <div><h2 className="display text-5xl text-cream">See it work</h2><p className="mt-6 text-lg">Follow an example from a Reel to an evidence verdict.</p><p className="mt-4 text-base text-cream/80">Illustrative demo; run the example for current research.</p></div>
-          <ReelDemo onRun={go} />
-        </div>
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24"><ReelDemo /></div>
       </section>
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="display text-4xl sm:text-5xl">Care when you want it</h2>
         <p className="mt-5 text-base text-muted">Services from licensed partner clinicians.</p>
-        <div className="mt-8 grid border-t border-line md:grid-cols-3">
+        <div className="mt-10 grid border-y border-line md:grid-cols-3 md:divide-x md:divide-line">
           {([
             { service: SERVICES.lab_review, href: "/labs?service=review", bullets: ["Written results explanation", "Reference-range context", "Questions for your doctor"] },
             { service: SERVICES.lab_consult, href: "/labs", bullets: ["Discuss your lab results", "Ask your questions", "Review next steps"] },
             { service: SERVICES.home_skin, href: "/visit", bullets: ["Skin-analysis equipment", "Written skin report", "Clinician-selected routine"] },
-          ]).map(({ service, href, bullets }) => <div key={service.id} className="flex flex-col border-b border-line py-8 md:px-6 md:first:pl-0 md:last:pr-0">
+          ]).map(({ service, href, bullets }) => <div key={service.id} className="flex min-w-0 flex-col border-b border-line py-8 last:border-b-0 md:border-b-0 md:px-8 md:first:pl-0 md:last:pr-0">
             <h3 className="display text-3xl md:min-h-20">{service.name}</h3>
-            <p className="mt-5 text-5xl tabular-nums">{usd(service.price)}</p>
-            <p className="mt-4 text-base text-muted md:min-h-14">{service.mode}{service.minutes > 0 ? ` · ${service.minutes} minutes` : ""}</p>
-            <ul className="my-6 flex-1 space-y-3 text-base">{bullets.map(b => <li key={b}>{b}</li>)}</ul>
+            <p className="display mt-6 text-6xl tabular-nums text-burgundy sm:text-7xl">{usd(service.price)}</p>
+            <p className="mt-2 text-base text-muted md:min-h-14">{service.mode}{service.minutes > 0 ? ` · ${service.minutes} minutes` : ""}</p>
+            <ul className="my-6 flex-1 space-y-3 text-base">{bullets.map(b => <li key={b} className="flex items-start gap-3"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mt-1 shrink-0 text-rose"><path d="m20 6-11 11-5-5" /></svg><span>{b}</span></li>)}</ul>
             <Link href={href} className="inline-flex min-h-11 items-center gap-2 text-base text-burgundy">Book <span className="sr-only">{service.name}</span><ArrowRight size={16} /></Link>
           </div>)}
         </div>
-        <p className="mt-5 text-base text-muted">Pilot — request stored on this device; payment via Stripe on launch.</p>
-        <p className="mt-2 text-base text-muted">No payment is taken or clinician dispatched in this prototype.</p>
-        <p className="mt-2 text-base text-muted">Contact details only when you book.</p>
+        <p className="mt-6 max-w-4xl text-base leading-relaxed text-muted">Pilot: requests stored on this device; no payment taken or clinician dispatched. Payment via Stripe at launch. Contact details only when you book.</p>
         <Link href="/care" className="mt-5 inline-flex min-h-11 items-center gap-2 text-base text-burgundy">Compare care and memberships <ArrowRight size={16} /></Link>
       </section>
       <section id="verdicts" className="mx-auto max-w-6xl border-t border-line px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="display text-4xl sm:text-5xl">How verdicts work</h2>
-        <table className="mt-8 w-full text-left text-base"><caption className="sr-only">The five-verdict evidence scale</caption><thead><tr className="border-y border-line"><th scope="col" className="py-3 pr-3">Verdict</th><th scope="col" className="py-3">Meaning</th></tr></thead><tbody>
-          {VERDICT_MEANINGS.map(([verdict, meaning]) => <tr key={verdict} className="border-b border-line"><th scope="row" className="py-4 pr-3 font-normal"><VerdictBadge verdict={verdict} size="sm" /></th><td className="py-4 text-muted">{meaning}</td></tr>)}
-        </tbody></table>
-        <ul className="mt-8 space-y-3 text-base"><li>Human study quality matters more than study count.</li><li>Supporting and conflicting research both inform the verdict.</li><li>Thin evidence or incomplete retrieval means we abstain.</li></ul>
+        <ol aria-label="The five-verdict evidence scale, from supported to contradicted" className="mt-12 grid md:grid-cols-5">
+          {VERDICT_MEANINGS.map(([verdict, meaning]) => <li key={verdict} className="relative min-w-0 border-l border-line pb-8 pl-6 last:pb-0 md:border-l-0 md:border-t md:pb-0 md:pl-0 md:pr-4 md:pt-8">
+            <span aria-hidden="true" className="absolute -left-1 top-2 h-2 w-2 rounded-full bg-rose md:-top-1 md:left-0" />
+            <div className="[&>span]:whitespace-normal [&>span]:text-base"><VerdictBadge verdict={verdict} /></div>
+            <p className="mt-4 text-base leading-relaxed text-muted">{meaning}</p>
+          </li>)}
+        </ol>
+        <ul className="mt-12 grid gap-6 border-y border-line py-8 text-base md:grid-cols-3 md:gap-8">
+          {[
+            { path: "m9 12 2 2 4-4M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7Z", text: "Human study quality matters more than study count." },
+            { path: "M8 3 4 7l4 4M4 7h16M16 13l4 4-4 4M20 17H4", text: "Supporting and conflicting research both inform the verdict." },
+            { path: "M9 8v8M15 8v8", text: "Thin evidence or incomplete retrieval means we abstain." },
+          ].map(fact => <li key={fact.text} className="flex items-start gap-3"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mt-1 shrink-0 text-rose"><path d={fact.path} /></svg><span>{fact.text}</span></li>)}
+        </ul>
         <p className="mt-6 text-base text-muted">Sources: published research retrieved through <a href="https://pubmed.ncbi.nlm.nih.gov/" className="inline-flex min-h-11 items-center text-burgundy underline">PubMed</a>.</p>
       </section>
     </>

@@ -13,11 +13,12 @@ const AREAS = [
   { href: "/care", label: "Care", match: ["/care", "/plans", "/labs", "/visit"] },
 ];
 
-export function Logo() {
+/** `compact` hides the wordmark on phones so the nav fits 375px. */
+export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2">
       <span className="grid h-7 w-7 place-items-center rounded-md bg-burgundy font-[family-name:var(--font-display)] text-lg font-semibold text-cream">V</span>
-      <span className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-[-0.02em]">VetoHealth</span>
+      <span className={`font-[family-name:var(--font-display)] text-xl font-semibold tracking-[-0.02em] ${compact ? "hidden min-[440px]:inline" : ""}`}>VetoHealth</span>
     </span>
   );
 }
@@ -46,7 +47,7 @@ export default function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-cream/95 backdrop-blur-sm">
       <nav aria-label="Primary" className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" aria-label="VetoHealth home" className="shrink-0"><Logo /></Link>
+        <Link href="/" aria-label="VetoHealth home" className="shrink-0"><Logo compact /></Link>
         <div className="flex items-center gap-1 sm:gap-2">
           {AREAS.map((a) => {
             const on = active(a.match);
