@@ -263,17 +263,25 @@ function Analyzer() {
         const first = thread?.versions.at(-1)?.claims[0]?.assessment;
         const mood: Mood = running ? "checking" : first ? moodFor(first.verdict) : "unsure";
         return (
-          <div className="card mt-6 grid items-center gap-2 overflow-hidden sm:grid-cols-[200px_1fr]">
-            <div className="h-44 sm:h-48"><Vee mood={mood} compact /></div>
-            <div className="px-5 pb-5 sm:px-0 sm:pb-0 sm:pr-6" aria-live="polite">
+          <div className="card mt-8 grid items-center gap-0 sm:grid-cols-[minmax(240px,0.8fr)_1fr]">
+            <div className="mx-auto h-80 w-full max-w-80 sm:h-96"><Vee mood={mood} compact /></div>
+            <div className="min-w-0 px-6 pb-8 sm:px-0 sm:py-8 sm:pr-8" aria-live="polite">
               {running ? (
                 <>
-                  <p className="eyebrow">Vee is checking</p>
-                  <p className="mt-1 text-xl font-medium">{stage?.message ?? "Connecting to PubMed…"}</p>
+                  <h2 className="display text-3xl">Vee is checking</h2>
+                  <p className="mt-4 max-w-[45ch] text-base leading-relaxed text-muted">{stage?.message ?? "Connecting to PubMed…"}</p>
+                  <ol className="mt-6" aria-label="Analysis progress">
+                    {[...STAGES, { id: "done", label: "Report ready" }].map((s, i) => (
+                      <li key={s.id} aria-current={i === Math.max(0, stageIdx) ? "step" : undefined} className={`flex min-h-11 items-center gap-3 border-l-2 pl-4 text-base ${i === Math.max(0, stageIdx) ? "border-burgundy font-semibold text-burgundy" : "border-line text-muted"}`}>
+                        {i < stageIdx ? <Check size={18} className="shrink-0 text-success" aria-label="Complete" /> : <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${i === Math.max(0, stageIdx) ? "bg-burgundy" : "bg-line"}`} />}
+                        {s.label}
+                      </li>
+                    ))}
+                  </ol>
                 </>
               ) : first ? (
                 <>
-                  <p className="eyebrow">Vee&apos;s read</p>
+                  <h2 className="display text-2xl">Vee&apos;s read</h2>
                   <p className="mt-1 text-xl font-medium" style={{ color: VERDICTS[first.verdict].color }}>{VERDICTS[first.verdict].label}</p>
                   <p className="mt-1 max-w-[60ch] text-base text-fg/80">{first.bottom_line}</p>
                 </>
@@ -288,17 +296,7 @@ function Analyzer() {
       <AnimatePresence>
         {running && (
           <motion.div className="overflow-hidden">
-            <div className="card mt-6 p-5 sm:p-6">
-              <ol className="divide-y divide-line" aria-label="Analysis progress">
-                {STAGES.map((s, i) => (
-                  <li key={s.id} aria-current={i === stageIdx ? "step" : undefined} className="flex items-center gap-4 py-3">
-                    <span className="w-6 shrink-0 tabular-nums text-muted">{i + 1}.</span>
-                    <span className={`flex-1 text-base ${i === stageIdx ? "font-medium text-burgundy" : "text-muted"}`}>{s.label}</span>
-                    {i < stageIdx && <Check size={18} className="text-success" aria-label="Complete" />}
-                    {i === stageIdx && <span className="eyebrow">In progress</span>}
-                  </li>
-                ))}
-              </ol>
+            <div className="mt-4 border-b border-line px-2 pb-6">
               <details className="mt-5 text-base"><summary className="min-h-11 cursor-pointer">Progress details</summary><ul aria-live="polite" className="mt-5 space-y-2 border-t border-line pt-4 text-base">
                 {(log.length ? log : ["Connecting to PubMed…"]).map((m, i, arr) => (
                   <motion.li key={m + i} className={`flex items-start gap-2 ${i === arr.length - 1 ? "text-fg" : "text-muted"}`}>
@@ -327,7 +325,7 @@ function Analyzer() {
 
       {thread && !running && <details className="mt-6 border-y border-line py-3"><summary className="min-h-11 cursor-pointer">Source text</summary><p className="whitespace-pre-wrap break-words text-base">{thread.versions.at(-1)!.input.text}</p></details>}
 
-      <div ref={resultRef} className="scroll-mt-24 pt-8">
+      <div ref={resultRef} className="min-w-0 scroll-mt-24 pt-8">
         {thread && !running && (thread.versions.at(-1)!.claims.length ? (
           <ReportView key={thread.versions.length} thread={thread} onRecheck={() => analyze(thread)} rechecking={running} />
         ) : (

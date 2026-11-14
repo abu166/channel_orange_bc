@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ArrowUpRight, ChevronDown, Flag, RotateCw, ShieldAlert } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Check, ChevronDown, CircleHelp, Flag, Minus, RotateCw, Share2, ShieldAlert } from "lucide-react";
 import { VERDICTS, type ClaimReport, type EvidenceSource, type Report, type Stance } from "@/lib/types";
 import { VerdictBadge } from "@/components/ui";
 import SavingsPrompt from "@/components/SavingsPrompt";
@@ -59,10 +59,12 @@ function HighlightedInput({ report }: { report: Report }) {
 function StrengthMeter({ label }: { label: string }) {
   const lvl = { "Very weak": 1, Weak: 2, Moderate: 3, Strong: 4 }[label] ?? 1;
   return (
-    <div title="How much solid, consistent research we found. Not the chance the claim is true.">
-      <p className="eyebrow mb-2">Evidence base</p>
-      <div className="flex flex-wrap gap-1">{[1, 2, 3, 4].map((n) => <motion.span key={n} className="h-6 w-3 origin-bottom rounded-sm" style={{ background: n <= lvl ? "var(--color-signal)" : "var(--color-subtle)", height: 8 + n * 5 }} />)}</div>
-      <p className="mt-1.5 text-base font-medium">{label}</p>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2" title="How much solid, consistent research we found. Not the chance the claim is true.">
+      <p className="text-base text-muted">Evidence strength (uncalibrated)</p>
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true" className="flex gap-1">{[1, 2, 3, 4].map((n) => <span key={n} className="h-2 w-6 rounded-sm" style={{ background: n <= lvl ? "var(--color-signal)" : "var(--color-line)" }} />)}</span>
+        <span className="text-base font-semibold">{label}</span>
+      </div>
     </div>
   );
 }
@@ -71,18 +73,18 @@ function StrengthMeter({ label }: { label: string }) {
 function Ladder({ evidence, onPick }: { evidence: EvidenceSource[]; onPick: (pmid: string) => void }) {
 
   return (
-    <div className="border-y border-line py-6">
+    <div className="border-y border-line py-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <p className="eyebrow">The evidence ladder</p>
+        <h4 className="display text-2xl">Evidence ladder</h4>
         <p className="text-base text-muted">Select a dot to read a study.</p>
       </div>
       <div className="divide-y divide-line">
         {RUNGS.map((r, ri) => {
           const items = evidence.filter(r.test);
           return (
-            <div key={r.label} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[13rem_1fr] sm:gap-3 py-3">
+            <div key={r.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0 py-2 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_auto]">
               <p className={`text-base ${ri === 3 ? "text-muted" : "text-fg/80"}`}>{r.label}</p>
-              <div className="flex min-h-11 flex-wrap items-center gap-1 border-l border-line px-2">
+              <div className="order-3 col-span-2 flex min-w-0 flex-wrap items-center sm:order-none sm:col-span-1">
                 {items.length === 0 && <span className="text-base text-muted">none found</span>}
                 {items.map((e) => {
 
@@ -90,15 +92,16 @@ function Ladder({ evidence, onPick }: { evidence: EvidenceSource[]; onPick: (pmi
                   return (
                     <motion.button key={e.pmid} onClick={() => onPick(e.pmid)}
                       title={`${STANCE[e.stance].short} · ${e.study_design} ${e.year}: ${e.title}`} aria-label={`${STANCE[e.stance].short}: ${e.title}`}
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-burgundy hover:bg-surface" ><span className="h-4 w-4 rounded-full border-2" style={{ borderColor: c, background: e.counts_as_proof ? c : "transparent" }} /></motion.button>
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-burgundy transition-colors duration-150 ease-out hover:bg-blush-pale/40" ><span className="h-4 w-4 rounded-full border-2" style={{ borderColor: c, background: e.counts_as_proof ? c : "transparent" }} /></motion.button>
                   );
                 })}
               </div>
+              <span className="tabular-nums text-base text-muted" aria-label={`${items.length} studies`}>{items.length}</span>
             </div>
           );
         })}
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-base text-muted">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-base text-muted">
         {(Object.keys(STANCE) as Stance[]).map((s) => <span key={s} className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full" style={{ background: STANCE[s].color }} />{STANCE[s].short}</span>)}
         <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full border-2 border-muted" />hollow = doesn&apos;t count as proof</span>
       </div>
@@ -111,24 +114,24 @@ function StudyRow({ e, number, open, onToggle }: { e: EvidenceSource; number: nu
   const line = e.ai_reason ?? e.conclusion?.split(/(?<=\.)\s/)[0] ?? "No abstract on PubMed, so the direction isn't assessed.";
   return (
     <motion.li id={`study-${e.pmid}`}
-      className={`scroll-mt-28 border-b bg-surface transition ${open ? "border-rose/40" : "border-line"}`}>
-      <button onClick={onToggle} aria-expanded={open} className="flex min-h-11 w-full items-start gap-3 p-5 text-left focus-visible:outline-2 focus-visible:outline-burgundy">
+      className={`scroll-mt-28 border-b transition-colors duration-150 ease-out ${open ? "border-rose/40 bg-cream/60" : "border-line"}`}>
+      <button onClick={onToggle} aria-expanded={open} className="flex min-h-11 w-full items-start gap-3 px-0 py-4 text-left transition-colors duration-150 ease-out hover:bg-cream/60 focus-visible:outline-2 focus-visible:outline-burgundy">
         <span className="shrink-0 tabular-nums text-muted">[{number}]</span>
         <span className="min-w-0 flex-1">
-          <span className="block text-base font-medium leading-relaxed text-ink">{e.title}</span>
-          <span className="mt-2 block text-base text-muted">{e.journal} · {e.year} · <Term t={e.study_design} /></span>
-          <span className="mt-2 block text-base" style={{ color: c }}><b>{STANCE[e.stance].short}</b>{!e.counts_as_proof ? " · does not count as proof" : ""}{e.retrieved_via === "contradiction" ? " · no-effect search" : ""}</span>
-          <span className="mt-1 block text-base text-ink/85">{line}</span>
+          <span className="block text-[17px] font-semibold leading-relaxed text-ink">{e.title}</span>
+          <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-2 text-base text-muted"><span>{e.journal} · {e.year}</span><span className="rounded-md border border-line px-2 py-0.5"><Term t={e.study_design} /></span></span>
+          <span className="mt-4 flex flex-wrap items-center gap-2 text-base" style={{ color: c }}>{e.stance === "supports" ? <Check size={18} aria-hidden="true" /> : e.stance === "contradicts" ? <Minus size={18} aria-hidden="true" /> : <CircleHelp size={18} aria-hidden="true" />}<b>{STANCE[e.stance].short}</b>{!e.counts_as_proof ? " · does not count as proof" : ""}{e.retrieved_via === "contradiction" ? " · no-effect search" : ""}</span>
+          <span className="mt-2 block max-w-[70ch] text-base leading-relaxed text-ink/85">{line}</span>
 
         </span>
-        <ChevronDown size={16} className="mt-1 shrink-0 text-muted" />
+        <ChevronDown size={16} className={`mt-1 shrink-0 text-muted transition-transform duration-150 ease-out ${open ? "rotate-180" : ""}`} />
       </button>
-      <a href={e.url} target="_blank" rel="noopener noreferrer" className="ml-5 inline-flex min-h-11 items-center gap-1 text-base text-rose underline sm:ml-14">Read on PubMed <ArrowUpRight size={16} /></a>
+      <a href={e.url} target="_blank" rel="noopener noreferrer" className="mb-2 ml-8 inline-flex min-h-11 items-center gap-1 text-base text-rose underline decoration-rose/30 transition-colors duration-150 ease-out hover:text-burgundy">Read on PubMed <ArrowUpRight size={16} /></a>
       <AnimatePresence>
         {open && (
           <motion.div className="overflow-hidden">
             <div className="space-y-3 border-t border-line px-4 pb-4 pt-3 pl-10 text-base">
-              <p className="font-mono text-sm text-muted">PMID {e.pmid}</p>
+              <p className="font-mono break-all text-base text-muted">PMID {e.pmid}</p>
               {e.conclusion && <p className="text-muted"><b className="text-fg/90">The authors conclude:</b> {e.conclusion}</p>}
               <p className="text-base text-muted">{e.doi && <span className="font-mono break-all">DOI {e.doi} · </span>}{e.rationale}</p>
             </div>
@@ -188,29 +191,25 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
   }
   const count = (s: Stance) => evidence.filter((e) => e.stance === s).length;
   const list = evidence.filter((e) => filter === "all" || e.stance === filter);
-  const pick = (pmid: string) => { setFilter("all"); setOpenId(pmid); setTimeout(() => document.getElementById(`study-${pmid}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 60); };
+  const pick = (pmid: string) => { setFilter("all"); setOpenId(pmid); setTimeout(() => document.getElementById(`study-${pmid}`)?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" }), 60); };
 
   return (
     <motion.article id={`claim-${index}`}
-      className="relative scroll-mt-24 border-t border-line bg-surface">
+      className="relative min-w-0 scroll-mt-24 rounded-[10px] border border-line bg-surface">
 
       {/* 1 · the claim */}
       <div className="relative px-5 pt-6 sm:px-8 sm:pt-8">
-        <h3 className="display text-3xl sm:text-[2.6rem]">“{claim.normalized_text}”</h3>
+        <h3 className="display max-w-[45ch] break-words text-3xl leading-[1.15] sm:text-[2.6rem]">“{claim.normalized_text}”</h3>
       </div>
 
       {/* 2 · the answer */}
-      <div className="relative mt-6 border-y border-line px-5 py-7 sm:px-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-4">
-            <div>
-              <VerdictBadge verdict={a.verdict} size="lg" />
-              <p className="mt-1.5 max-w-[65ch] text-lg leading-relaxed sm:text-xl">{a.bottom_line}</p>
-            </div>
-          </div>
-          <StrengthMeter label={a.strength_label} />
+      <div className="relative mt-6 border-y border-line bg-cream/60 px-5 py-6 sm:px-8 sm:py-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <VerdictBadge verdict={a.verdict} size="lg" />
+          <button onClick={() => void shareVerdict()} className="btn-ghost !px-3 text-base"><Share2 size={18} aria-hidden="true" />Share verdict</button>
         </div>
-        <button onClick={() => void shareVerdict()} className="btn-ghost mt-4 min-h-11">Share verdict</button>
+        <p className="display mt-6 max-w-[45ch] break-words text-2xl leading-[1.25] sm:text-3xl">{a.bottom_line}</p>
+        <div className="mt-6 border-t border-line pt-4"><StrengthMeter label={a.strength_label} /></div>
         {shareStatus && <p role="status" className="mt-2 text-base text-muted">{shareStatus}</p>}
         {!a.retrieval_complete && <p className="mt-4 flex items-start gap-2 text-base text-misleading"><AlertTriangle size={16} className="mt-0.5 shrink-0" /> Search incomplete: PubMed failed; evidence remains unassessed.</p>}
       </div>
@@ -220,25 +219,30 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
           <div className="space-y-2 text-base">
             <p>{a.retrieval_complete ? "No published human studies matched this claim." : "The search is incomplete; evidence could not be assessed."}</p>
             {a.retrieval_complete && <p className="text-muted">A confident claim with no research behind it is a red flag.</p>}
-            {a.queries[0] && <a href={`https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(a.queries[0])}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm text-rose underline underline-offset-4">Search PubMed yourself</a>}
+            {a.queries[0] && <a href={`https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(a.queries[0])}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-base text-rose underline underline-offset-4">Search PubMed yourself</a>}
           </div>
         ) : (
           <>
         {/* 3 · the numbers */}
-        <table className="w-full table-fixed border-y border-line text-left tabular-nums" aria-label="Study directions">
-          <thead><tr>{["Agree", "No effect / opposite", "Unclear"].map(label => <th key={label} scope="col" className="px-2 pt-4 text-sm font-medium text-muted">{label}</th>)}</tr></thead>
-          <tbody><tr>{(Object.keys(STANCE) as Stance[]).map(s => <td key={s} className="px-2 pb-3"><button aria-label={`Filter: ${STANCE[s].label}`} aria-pressed={filter === s} onClick={() => setFilter(filter === s ? "all" : s)} className={`min-h-11 w-full text-left text-3xl tabular-nums ${filter === s ? "text-burgundy underline underline-offset-4" : "text-ink"}`}>{count(s)}</button></td>)}</tr></tbody>
-        </table>
+        <section aria-label="Study directions" className="space-y-4">
+          <h4 className="display text-2xl">What the studies found</h4>
+          <div role="img" aria-label={(Object.keys(STANCE) as Stance[]).map(s => `${STANCE[s].short}: ${count(s)} of ${evidence.length} studies`).join("; ")} className="flex h-4 overflow-hidden rounded-md bg-subtle">
+            {(Object.keys(STANCE) as Stance[]).filter(s => count(s) > 0).map(s => <span key={s} style={{ width: `${count(s) / evidence.length * 100}%`, background: STANCE[s].color }} />)}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {(Object.keys(STANCE) as Stance[]).map(s => <button key={s} aria-pressed={filter === s} onClick={() => setFilter(filter === s ? "all" : s)} className={`inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-base transition-colors duration-150 ease-out hover:bg-blush-pale/40 ${filter === s ? "bg-blush-pale text-burgundy" : "text-muted"}`}><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ background: STANCE[s].color }} />{STANCE[s].short}<span className="font-semibold tabular-nums text-ink">{count(s)}</span></button>)}
+          </div>
+        </section>
 
         {evidence.length >= 3 && <Ladder evidence={evidence} onPick={pick} />}
 
         {/* 4 · the studies */}
         <div>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="eyebrow">References ({evidence.length})</p>
-            <div className="flex flex-wrap gap-1">
+            <h4 className="display text-2xl">References <span className="tabular-nums">({evidence.length})</span></h4>
+            <div className="inline-flex max-w-full flex-wrap gap-1 rounded-lg border border-line p-1" role="group" aria-label="Filter references">
               {(["all", "supports", "contradicts", "neutral"] as const).map((f) => (
-                <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)} className={`min-h-11 rounded-md px-3 py-2 text-base transition focus-visible:outline-2 focus-visible:outline-burgundy ${filter === f ? "bg-blush-pale text-burgundy" : "text-muted hover:text-fg"}`}>{f === "all" ? "All" : STANCE[f].short}</button>
+                <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)} className={`min-h-11 rounded-md px-3 py-2 text-base transition-colors duration-150 ease-out focus-visible:outline-2 focus-visible:outline-burgundy ${filter === f ? "bg-blush-pale text-burgundy" : "text-muted hover:text-fg"}`}>{f === "all" ? "All" : f === "contradicts" ? "No effect" : STANCE[f].short} <span className="ml-1 tabular-nums">{f === "all" ? evidence.length : count(f)}</span></button>
               ))}
             </div>
           </div>
@@ -282,7 +286,7 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
                 <div className="space-y-5 border-t border-line p-4 text-base">
                   <ul className="space-y-2 text-fg/75">{a.limitations.map((l) => <li key={l} className="flex gap-2"><span className="text-muted">•</span>{l}</li>)}</ul>
                   <div>
-                    <p className="eyebrow mb-2">How we searched PubMed</p>
+                    <h5 className="mb-2 text-base font-semibold">How we searched PubMed</h5>
                     <ul className="space-y-1 break-all text-base text-muted">{a.queries.map((q) => <li key={q}><a className="hover:text-burgundy" target="_blank" rel="noopener noreferrer" href={`https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(q)}`}>{q} ↗</a></li>)}</ul>
                   </div>
                   <p className="text-base text-muted">rubric {a.rubric_version} · {a.model_version} · evidence strength {Math.round(a.confidence_score * 100)}/100 (uncalibrated) · AI-generated, not clinician-reviewed</p>
@@ -307,13 +311,13 @@ export default function ReportView({ thread, onRecheck, rechecking }: { thread: 
   const savingsClaim = report.claims.find((c) => ["misleading", "contradicted", "insufficient_evidence", "partially_supported"].includes(c.assessment.verdict));
   const studies = report.claims.reduce((n, c) => n + c.evidence.length, 0);
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-8 break-words">
       <div className="border-y border-line py-6 sm:py-8">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="eyebrow">You checked · {report.input.content_type.replace(/_/g, " ")}{report.input.source_url ? ` · ${new URL(report.input.source_url).hostname}` : ""}</p>
           <div className="flex flex-wrap items-center gap-2">
             {thread.versions.length > 1 && thread.versions.map((v, i) => (
-              <button key={v.id} onClick={() => setVi(i)} className={`chip min-h-11 ${i === vi ? "!border-rose !bg-blush-pale !text-burgundy" : ""}`}>v{v.version}</button>
+              <button key={v.id} onClick={() => setVi(i)} className={`chip min-h-11 !text-base ${i === vi ? "!border-rose !bg-blush-pale !text-burgundy" : ""}`}>v{v.version}</button>
             ))}
             {onRecheck && <button onClick={onRecheck} disabled={rechecking} className="btn-ghost !py-1.5 text-base"><RotateCw size={13} className={rechecking ? "animate-spin" : ""} /> Re-check evidence</button>}
           </div>
@@ -323,7 +327,7 @@ export default function ReportView({ thread, onRecheck, rechecking }: { thread: 
           <p className="text-base text-fg/80"><b className="text-fg">{report.claims.length} claim{report.claims.length === 1 ? "" : "s"}</b> · <b className="text-fg">{studies} PubMed studies</b> · {new Date(report.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
           <div className="flex flex-wrap gap-1.5">
             {report.claims.map((c, i) => (
-              <a key={c.claim.claim_id} href={`#claim-${i}`} className="chip min-h-11 !py-1" style={{ borderColor: VERDICTS[c.assessment.verdict].color }}>
+              <a key={c.claim.claim_id} href={`#claim-${i}`} className="chip min-h-11 !text-base !py-1" style={{ borderColor: VERDICTS[c.assessment.verdict].color }}>
                 {i + 1}. {VERDICTS[c.assessment.verdict].label}
               </a>
             ))}

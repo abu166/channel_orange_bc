@@ -17,13 +17,13 @@ export function VerdictBadge({ verdict, size = "md", stamp: _stamp = false }: { 
   void _stamp;
   const v = VERDICTS[verdict];
   const Icon = VERDICT_ICON[verdict];
-  const cls = size === "lg" ? "px-4 py-2 text-base gap-2" : size === "sm" ? "px-2 py-0.5 text-sm gap-1" : "px-3 py-1 text-[15px] gap-1.5";
+  const cls = size === "lg" ? "px-4 py-3 text-lg gap-2" : size === "sm" ? "px-2 py-1 text-base gap-1" : "px-3 py-2 text-base gap-1.5";
   return (
     <span
       className={`inline-flex items-center rounded-md font-semibold ${cls}`}
       style={{ color: v.color, background: `color-mix(in srgb, ${v.color} 13%, white)`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${v.color} 28%, transparent)` }}
     >
-      <Icon size={size === "lg" ? 18 : 15} strokeWidth={2.4} aria-hidden="true" />
+      <Icon size={size === "lg" ? 22 : 18} strokeWidth={2.4} aria-hidden="true" />
       {v.label}
     </span>
   );
