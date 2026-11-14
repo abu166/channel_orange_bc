@@ -34,7 +34,7 @@ Radii 6–10px: buttons/inputs/chips `rounded-md` (6px), cards `rounded-[10px]`.
 Flat, labelled, honest. Range bars: cream track, `success` band for the lab's printed range, ink marker for the value. Evidence ladder: verdict colours only. Charts use burgundy (primary series), blush (secondary), ink gridlines at 8%. Always label units and sources.
 
 ## Motion
-Minimal and functional: 150–250 ms ease-out on state changes. One authored moment on the homepage (the Reel claim check). No section fades, marquees, pulsing dots or bounce.
+Minimal and functional: 150–250 ms ease-out on state changes. Two authored moments, both on the homepage: the hero stage (Vee drops in, follows the cursor, scans viral posts and stamps them "PROOF?"; the stamp asks a question and never shows a verdict) and the Reel claim check. Character motion stays inside Vee's stage; the rest of the UI gets no section fades, marquees, pulsing dots or bounce. Everything respects `prefers-reduced-motion` (static stamps, no loop).
 
 ## Never
 Generic SaaS dashboards, excessive cards or nested cards, oversized rounded containers, decorative AI illustrations, sparkle icons, labels above headings, badges above the hero headline, gradient text, glows, tiny text, em-dash-heavy copy.

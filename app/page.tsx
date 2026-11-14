@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { VerdictBadge } from "@/components/ui";
 import { VERDICTS, type Verdict } from "@/lib/types";
 import { SERVICES } from "@/lib/pricing";
@@ -12,15 +12,10 @@ import { listThreads } from "@/lib/store";
 import { listBookings } from "@/lib/booking";
 import { savingsTotals, SAVINGS_EVENT, usd } from "@/lib/savings";
 import ReelDemo from "@/components/ReelDemo";
+import HeroStage from "@/components/HeroStage";
 
-/** Real claims circulating on social media; tapping Vee checks one live. */
-const VIRAL = ["Seed oils are toxic", "Rosemary oil regrows hair", "Sugar causes acne", "Apple cider vinegar lowers blood sugar", "Cold plunges boost immunity", "Mouth taping improves sleep", "Ashwagandha reduces stress", "Red light therapy reduces wrinkles", "Creatine improves memory", "Coffee causes anxiety"];
-
-// The 3D mascot loads on the client only, with a calm placeholder while three.js downloads.
-const HeroScene = dynamic(() => import("@/components/HeroScene"), {
-  ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse rounded-[10px] bg-blush-pale/40" />,
-});
+/** The promise, with the verb that changes what people do with a claim. */
+const VERBS = ["buy", "believe", "share", "try"];
 
 const VERDICT_MEANINGS: [Verdict, string][] = [
   ["supported", "Good-quality human evidence backs the claim as stated."],
@@ -35,7 +30,24 @@ export default function Home() {
   const [q, setQ] = useState("");
   const [mood, setMood] = useState<Mood>("idle");
   const go = (t: string) => { setMood("checking"); router.push(`/check?q=${encodeURIComponent(t)}&run=1`); };
-  const poke = () => go(`${VIRAL[Math.floor(Math.random() * VIRAL.length)]}.`);
+  const reduced = useReducedMotion();
+  const [verb, setVerb] = useState(0);
+  // The highlight animates to each verb's real width (measured), so "it." glides instead of jumping.
+  const measure = useRef<(HTMLSpanElement | null)[]>([]);
+  const [widths, setWidths] = useState<number[]>([]);
+  useEffect(() => {
+    const calc = () => setWidths(measure.current.map(el => el?.getBoundingClientRect().width ?? 0));
+    calc();
+    void document.fonts?.ready.then(calc);
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
+  useEffect(() => {
+    router.prefetch("/check");
+    if (reduced) return;
+    const id = window.setInterval(() => setVerb(v => (v + 1) % VERBS.length), 2600);
+    return () => window.clearInterval(id);
+  }, [reduced, router]);
 
   const [preview, setPreview] = useState<{ ready: boolean; verdict?: Verdict; shelf?: string; care?: string; money?: string }>({ ready: false });
   useEffect(() => {
@@ -69,38 +81,45 @@ export default function Home() {
   return (
     <>
       <section className="relative overflow-hidden">
-        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 pb-12 pt-10 sm:px-6 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] md:py-20">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-6 px-4 pb-14 pt-8 sm:px-6 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] md:gap-10 md:py-16">
           <div className="min-w-0">
-            <h1 className="display text-[clamp(3rem,6.5vw,5.5rem)]">
-              Check it <span className="mark">before you buy it</span>.
+            <h1 className="display relative text-[clamp(3.1rem,7vw,5.75rem)]">
+              <span className="sr-only">Check it before you buy it.</span>
+              <span aria-hidden="true">Check it before you{" "}
+                <span className="pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap">{VERBS.map((v, i) => <span key={v} ref={el => { measure.current[i] = el; }} className="inline-block px-1 italic">{v}</span>)}</span>
+                <motion.span animate={widths[verb] ? { width: widths[verb] } : undefined} transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }} className="mark relative inline-flex overflow-hidden whitespace-nowrap align-baseline">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span key={VERBS[verb]} initial={{ y: "90%", opacity: 0 }} animate={{ y: "0%", opacity: 1 }} exit={{ y: "-90%", opacity: 0 }} transition={{ duration: 0.38, ease: [0.2, 0.8, 0.2, 1] }} className="inline-block italic">
+                      {VERBS[verb]}
+                    </motion.span>
+                  </AnimatePresence>
+                </motion.span>{" "}it.
+              </span>
             </h1>
-            <div>
-              <p className="mt-7 max-w-lg text-lg leading-relaxed text-fg/80">
-                Claims, products and lab results, checked against published research.
-              </p>
-              <form onSubmit={(e) => { e.preventDefault(); if (q.trim().length >= 8) go(q); }} className="mt-8 flex max-w-xl flex-col gap-2 rounded-[10px] border border-line bg-surface p-2  focus-within:ring-2 focus-within:ring-rose sm:flex-row">
-                <label htmlFor="hero-q" className="sr-only">Health claim</label>
-                <input id="hero-q" value={q} onChange={(e) => { setQ(e.target.value); setMood(e.target.value ? "typing" : "idle"); }} onBlur={() => !q && setMood("idle")} placeholder="Paste a claim you saw… e.g. “ice baths boost immunity”" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base outline-none placeholder:text-muted focus-visible:outline-2 focus-visible:outline-burgundy rounded-[10px]" />
-                <button disabled={q.trim().length < 8} className="btn-primary">Check this claim <ArrowRight size={16} /></button>
-              </form>
-              <p className="mt-3 text-base text-muted">No sign-up. Your ledger stays on this device.</p>
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-base">
-                <span className="text-fg/80">Or try:</span>
-                {["Vitamin C prevents the common cold.", "Collagen improves skin elasticity.", "Celery juice cures eczema."].map((t) => (
-                  <button key={t} onClick={() => go(t)} className="chip-lg max-w-full whitespace-normal text-left hover:!border-rose hover:!text-burgundy">{t.replace(".", "")} →</button>
-                ))}
-              </div>
-            </div>
+            <p className="mt-7 max-w-lg text-lg leading-relaxed text-fg/80">
+              Viral claims, products and lab results, checked against published research in seconds.
+            </p>
+            <form onSubmit={(e) => { e.preventDefault(); if (q.trim().length >= 8) go(q); }} className="mt-8 flex max-w-xl flex-col gap-2 rounded-[10px] border border-line bg-surface p-2 focus-within:ring-2 focus-within:ring-rose sm:flex-row">
+              <label htmlFor="hero-q" className="sr-only">Health claim</label>
+              <input id="hero-q" value={q} onChange={(e) => { setQ(e.target.value); setMood(e.target.value ? "typing" : "idle"); }} onBlur={() => !q && setMood("idle")} placeholder="Paste a claim or a Reel link…" className="min-w-0 flex-1 rounded-[10px] bg-transparent px-4 py-3 text-base outline-none placeholder:text-muted focus-visible:outline-2 focus-visible:outline-burgundy" />
+              <button disabled={q.trim().length < 8} className="btn-primary">Check this claim <ArrowRight size={16} /></button>
+            </form>
+            <dl className="mt-8 grid max-w-xl grid-cols-3 divide-x divide-line border-y border-line">
+              {[["37M+", "PubMed papers searched"], ["~10 s", "to a verdict"], ["$0", "no sign-up, ever"]].map(([n, l]) => (
+                <div key={l} className="px-3 py-3 first:pl-0">
+                  <dt className="sr-only">{l}</dt>
+                  <dd className="font-display text-2xl tabular-nums text-burgundy sm:text-3xl">{n}</dd>
+                  <dd className="mt-1 text-base leading-snug text-muted">{l}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
           <div className="relative min-w-0">
-            <div className="h-[260px] sm:h-[360px] md:h-[460px]"><HeroScene mood={mood} onPoke={poke} /></div>
-            <button onClick={poke} className="mx-auto mt-1 flex min-h-11 items-center gap-2 rounded-md px-3 text-base text-fg/80 hover:text-burgundy">
-              Tap Vee for a viral claim <ArrowRight size={15} />
-            </button>
+            <HeroStage mood={mood} onCheck={(t) => go(`${t}.`)} />
+            <p className="mt-2 text-center text-base text-muted">Tap a post or Vee. It runs a real check.</p>
           </div>
         </div>
       </section>
-
 
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="display text-4xl sm:text-5xl">The loop</h2>
