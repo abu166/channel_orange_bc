@@ -82,7 +82,7 @@ export function ClaimCard({ thread, claims, busy, open, recheck, remove }: {
     </div>)}</div>
     {!claims.length && <h3 className="text-lg">{thread.title}</h3>}
     <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
-      <button onClick={open} className="btn-primary min-h-11 text-base">Open report</button>
+      <button onClick={open} className="btn-ghost min-h-11 text-base">Open report</button>
       <button onClick={recheck} disabled={busy} className="btn-ghost min-h-11 text-base disabled:opacity-50"><RotateCw size={16} className={busy ? "animate-spin" : ""} />{busy ? "Checking…" : "Re-check"}</button>
       <button onClick={remove} className="btn-ghost min-h-11 text-base"><Trash2 size={16} />Delete</button>
     </div>
@@ -99,7 +99,7 @@ export function AppointmentCard({ booking: b, cancel, calendar }: { booking: Boo
   </motion.article>;
 }
 export function EmptyHistory({ appointments = false }: { appointments?: boolean }) {
-  return <div className="card p-8 text-center sm:p-12"><h2 className="display text-4xl">{appointments ? "Your next step in care." : "Your evidence, in one place."}</h2><p className="mx-auto mt-3 max-w-[65ch] text-base text-muted">{appointments ? "Your lab reviews and skin visit requests." : "Check a claim to start your history."}</p><div className="mt-6 flex flex-wrap justify-center gap-3">{appointments ? <><Link href="/labs" className="btn-primary min-h-11">Explore lab reviews</Link><Link href="/visit" className="btn-ghost min-h-11">Explore skin visits</Link></> : <Link href="/analyze" className="btn-primary min-h-11">Check a claim</Link>}</div></div>;
+  return <div className="card p-8 text-center sm:p-12"><h2 className="display text-4xl">{appointments ? "Your next step in care." : "Your evidence, in one place."}</h2><p className="mx-auto mt-3 max-w-[65ch] text-base text-muted">{appointments ? "Your lab reviews and skin visit requests." : "Check a claim to start your ledger."}</p><div className="mt-6 flex flex-wrap justify-center gap-3">{appointments ? <><Link href="/labs" className="btn-ghost min-h-11">Explore lab reviews</Link><Link href="/visit" className="btn-ghost min-h-11">Explore skin visits</Link></> : <Link href="/check" className="btn-ghost min-h-11">Check a claim</Link>}</div></div>;
 }
 
 export function SavingsList({ entries, remove }: { entries: SavingEntry[]; remove: (id: string) => void }) {
@@ -109,7 +109,7 @@ export function SavingsList({ entries, remove }: { entries: SavingEntry[]; remov
       <ul className="divide-y divide-line border-y border-line">{entries.map(entry =>
         <li key={entry.id} className="flex flex-wrap items-center gap-4 py-5 text-base">
           <span className="min-w-0 flex-1 break-words">{entry.label}</span>
-          <span className="text-muted">{entry.source === "claim" ? "Claim" : "Routine"}</span>
+          <span className="text-muted">{entry.source === "claim" ? "Claim" : "Shelf"}</span>
           <span className="tabular-nums">{usd(entry.monthly_usd)}/month</span>
           <button className="btn-ghost min-h-11" aria-label={`Remove saving: ${entry.label}`} onClick={() => remove(entry.id)}>Remove saving</button>
         </li>)}</ul>}

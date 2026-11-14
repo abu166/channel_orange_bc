@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ArrowUpRight, Check, ChevronDown, CircleHelp, Contrast, Flag, RotateCw, ShieldAlert, X } from "lucide-react";
-import { VERDICTS, type ClaimReport, type EvidenceSource, type Report, type Stance, type Verdict } from "@/lib/types";
+import { AlertTriangle, ArrowUpRight, ChevronDown, Flag, RotateCw, ShieldAlert } from "lucide-react";
+import { VERDICTS, type ClaimReport, type EvidenceSource, type Report, type Stance } from "@/lib/types";
+import { VerdictBadge } from "@/components/ui";
 import SavingsPrompt from "@/components/SavingsPrompt";
 import { addChallenge, type Thread } from "@/lib/store";
 
@@ -11,7 +12,6 @@ const STANCE: Record<Stance, { label: string; short: string; color: string }> = 
   contradicts: { label: "Found no effect / the opposite", short: "No effect / opposite", color: "var(--color-contradict)" },
   neutral: { label: "Unclear or off-target", short: "Unclear", color: "var(--color-insufficient)" },
 };
-const ICON: Record<Verdict, typeof Check> = { supported: Check, partially_supported: Contrast, insufficient_evidence: CircleHelp, misleading: AlertTriangle, contradicted: X };
 const GLOSSARY: Record<string, string> = {
   "Meta-analysis": "Pools the results of many studies into one answer. Top of the evidence ladder.",
   "Systematic review": "Researchers collect every study on a question and grade them together.",
@@ -157,7 +157,7 @@ function ChallengeForm({ threadId, claimId }: { threadId: string; claimId: strin
               <input id={`u-${claimId}`} required type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Link to a study or official source (https://…)" className="field" />
               <label className="sr-only" htmlFor={`w-${claimId}`}>Explanation</label>
               <textarea id={`w-${claimId}`} required value={why} onChange={(e) => setWhy(e.target.value)} placeholder="What did we miss?" rows={2} className="field" />
-              <button className="btn-primary w-fit !py-2 text-base">Submit challenge</button>
+              <button className="btn-ghost w-fit min-h-11 text-base">Submit challenge</button>
             </div>
           </motion.form>
         )}
@@ -173,7 +173,7 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
   const [fine, setFine] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
   async function shareVerdict() {
-    const url = `${location.origin}/analyze?q=${encodeURIComponent(claim.normalized_text)}&run=1`;
+    const url = `${location.origin}/check?q=${encodeURIComponent(claim.normalized_text)}&run=1`;
     try {
       if (navigator.share) {
         await navigator.share({ title: "VetoHealth verdict", text: `${VERDICTS[a.verdict].label}: ${claim.normalized_text}`, url });
@@ -186,8 +186,6 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
       if (!(error instanceof DOMException && error.name === "AbortError")) setShareStatus("Sharing failed. Try again.");
     }
   }
-  const v = VERDICTS[a.verdict];
-  const Icon = ICON[a.verdict];
   const count = (s: Stance) => evidence.filter((e) => e.stance === s).length;
   const list = evidence.filter((e) => filter === "all" || e.stance === filter);
   const pick = (pmid: string) => { setFilter("all"); setOpenId(pmid); setTimeout(() => document.getElementById(`study-${pmid}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 60); };
@@ -196,19 +194,12 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
     <motion.article id={`claim-${index}`}
       className="relative scroll-mt-24 border-t border-line bg-surface">
 
-      {/* 1 · the claim */}
-      <div className="relative px-5 pt-6 sm:px-8 sm:pt-8">
-        
-        <h3 className="display text-3xl sm:text-[2.6rem]">“{claim.normalized_text}”</h3>
-      </div>
-
       {/* 2 · the answer */}
       <div className="relative mt-6 border-y border-line px-5 py-7 sm:px-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
-            <span className="shrink-0 pt-1 text-fg"><Icon size={20} strokeWidth={1.75} /></span>
             <div>
-              <p className="text-base font-medium" style={{ color: v.color }}>{v.label}</p>
+              <VerdictBadge verdict={a.verdict} size="lg" />
               <p className="mt-1.5 max-w-[65ch] text-lg leading-relaxed sm:text-xl">{a.bottom_line}</p>
             </div>
           </div>
@@ -218,6 +209,13 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
         {shareStatus && <p role="status" className="mt-2 text-base text-muted">{shareStatus}</p>}
         {!a.retrieval_complete && <p className="mt-4 flex items-start gap-2 text-base text-misleading"><AlertTriangle size={16} className="mt-0.5 shrink-0" /> Search incomplete: PubMed failed; evidence remains unassessed.</p>}
       </div>
+
+      {/* 1 · the claim */}
+      <div className="relative px-5 pt-6 sm:px-8 sm:pt-8">
+        
+        <h3 className="display text-3xl sm:text-[2.6rem]">“{claim.normalized_text}”</h3>
+      </div>
+
 
       {["misleading", "contradicted", "insufficient_evidence", "partially_supported"].includes(a.verdict) && (
         <section className="border-b border-line px-5 py-5 sm:px-8">
@@ -233,19 +231,6 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
         </table>
 
         <Ladder evidence={evidence} onPick={pick} />
-
-        {a.plain_explainer && (
-          <details className="border-t border-line py-5">
-            <summary className="min-h-11 cursor-pointer text-base font-medium">Study summary · AI</summary>
-            <p className="max-w-[65ch] text-base leading-relaxed text-fg/85">{a.plain_explainer}</p>
-          </details>
-        )}
-        {a.safety_notes.length > 0 && (
-          <div className="flex gap-3 border-t border-line py-5 text-base text-muted">
-            <ShieldAlert size={18} className="mt-0.5 shrink-0" />
-            <div><h4 className="mb-2 font-medium text-ink">Safety notes</h4><ul className="space-y-1">{a.safety_notes.map((l) => <li key={l}>{l}</li>)}</ul></div>
-          </div>
-        )}
 
         {/* 4 · the studies */}
         <div>
@@ -267,6 +252,20 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
             </AnimatePresence>
           </ul>
         </div>
+
+        <details className="border-t border-line py-4"><summary className="min-h-11 cursor-pointer text-base font-medium">Details</summary>
+        {a.plain_explainer && (
+          <details className="border-t border-line py-5">
+            <summary className="min-h-11 cursor-pointer text-base font-medium">Study summary · AI</summary>
+            <p className="max-w-[65ch] text-base leading-relaxed text-fg/85">{a.plain_explainer}</p>
+          </details>
+        )}
+        {a.safety_notes.length > 0 && (
+          <div className="flex gap-3 border-t border-line py-5 text-base text-muted">
+            <ShieldAlert size={18} className="mt-0.5 shrink-0" />
+            <div><h4 className="mb-2 font-medium text-ink">Safety notes</h4><ul className="space-y-1">{a.safety_notes.map((l) => <li key={l}>{l}</li>)}</ul></div>
+          </div>
+        )}
 
         {/* 5 · fine print */}
         <div className="border-y border-line">
@@ -290,6 +289,8 @@ export function ClaimCard({ r, index, threadId }: { r: ClaimReport; index: numbe
           </AnimatePresence>
         </div>
         {threadId && <ChallengeForm threadId={threadId} claimId={claim.claim_id} />}
+        </details>
+        <a href="/care" className="inline-flex min-h-11 items-center text-base text-rose underline underline-offset-4">Discuss with a clinician</a>
       </div>
     </motion.article>
   );

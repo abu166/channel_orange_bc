@@ -1,6 +1,6 @@
 # VetoHealth: design system
 
-Brand brief: luxury dermatology editorial × independent scientific publication × modern private healthcare × premium consumer tech. It must read as the work of an experienced human product team. Tokens live in `app/globals.css`; agents follow `.codex/skills/veto-design/SKILL.md`.
+Brand brief: luxury dermatology editorial × independent scientific publication × modern private healthcare × premium consumer tech. It must read as the work of an experienced human product team. Structure and navigation: `docs/IA.md`. Tokens live in `app/globals.css`; agents follow `.codex/skills/veto-design/SKILL.md`.
 
 ## Colour (official palette, exact values)
 | Token | Hex | Use |
@@ -11,20 +11,20 @@ Brand brief: luxury dermatology editorial × independent scientific publication 
 | `blush-pale` (= `highlight`, `signal-soft`) | #EAD9D5 | Selected backgrounds, `.mark` highlight, quiet fills |
 | `cream` (= `canvas`) | #F8F3ED | Main background for most pages |
 | `ink` (= `fg`) | #292326 | Main text |
-| `success` | #54765E | Supported, in range, confirmed |
-| `warning` | #B77A35 | Partly true, needs checking |
-| `danger` | #A84D50 | Misleading, outside range, errors |
-Derived: `surface` #FDFAF6 (cards/inputs), `subtle` #F1E7E1 (alternating sections), `muted` #6E6266 (secondary text), `line` ink at 12%, `insufficient` #7A6E72, `contradict` #7A2E33.
+| `success` | #2F7D5B | Supported, in range, confirmed |
+| `warning` | #B5701A | Partly true, needs checking |
+| `danger` | #A4262C | Contradicted, outside range, errors |
+Derived: `surface` #FDFAF6 (cards/inputs), `subtle` #F1E7E1 (alternating sections), `muted` #6E6266 (secondary text), `line` ink at 12%. Verdict scale: supported = success, partly true = warning, not enough evidence #56657A, misleading #C2502B, contradicted = danger. Every verdict badge carries an icon (check, half circle, question, warning, cross) so colour is never the only signal.
 No purple, electric blue, neon, gradients or glassmorphism.
 
 ## Type
 | Role | Face | Spec |
 |---|---|---|
-| Display / headings | DM Serif Display 400 (`.display`) | Sentence case, leading 1.05, tracking -0.01em. Max 6rem. |
-| Subtitle | DM Sans 500 | text-lg/xl, `text-ink/80` |
-| Body | DM Sans 400 | 16px floor, line-height 1.6, 65–75ch |
-| Labels, buttons, nav, tables | DM Sans 500/600 | 14–15px, tabular numerals in tables |
-| Metadata & annotations | DM Sans 500, 13px (`.eyebrow`) | Muted. Never a kicker above a heading. |
+| Display / headings | Newsreader 500, optical sizes (`.display`) | A serif drawn for publications. Sentence case, leading 1.02, tracking -0.02em. Max 6rem. |
+| Subtitle | Manrope 500 | text-lg/xl, `text-ink/80` |
+| Body | Manrope 400 | 16px floor, line-height 1.6, 65–75ch |
+| Labels, buttons, nav, tables | Manrope 600 | 14–15px, tabular numerals in tables |
+| Metadata & annotations | Manrope 500, 13px (`.eyebrow`) | Muted. Never a kicker above a heading. |
 | Identifiers | DM Mono 400 | PMIDs, DOIs, queries only |
 
 ## Shape, depth, spacing

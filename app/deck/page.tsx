@@ -35,7 +35,7 @@ export default function DeckPage() {
       <Slide n={1} title="VetoHealth">
         <p className="promise">Check before you buy.</p>
         <div className="title-rule" />
-        <p className="large">Evidence → routine → licensed clinician</p>
+        <p className="large">Check → Shelf → Care → Ledger</p>
         <div className="title-meta"><span>Team VetoHealth</span><span>Business Cup 2.0 · Track 01 MONEY</span></div>
       </Slide>
       <Slide n={2} title="Money leaks on health guesses">
@@ -48,20 +48,20 @@ export default function DeckPage() {
         <div className="split"><div><strong className="hero-number">$80<span>/mo</span></strong><p>Skincare and supplements discovered on TikTok.</p></div>
           <ol className="editorial-list"><li>Sees a persuasive health claim</li><li>Buys before checking the evidence</li><li>Stacks overlapping routine products</li><li>Wants personal advice before spending again</li></ol></div>
       </Slide>
-      <Slide n={4} title="From claim to clinician" note="Educational only. Not medical advice. Clinical care requires licensed partners.">
+      <Slide n={4} title="Check → Shelf → Care → Ledger" note="Educational only. Not medical advice. Clinical care requires licensed partners.">
         <div className="steps">{[
-          ["01", "Claim", "Paste a claim or label", "/analyze"],
-          ["02", "Verdict", "Live PubMed, linked evidence", "/analyze"],
-          ["03", "Routine", "Review overlapping actives", "/routine"],
-          ["04", "Clinician", "Request personal interpretation", "/labs"],
+          ["01", "Check", "Live PubMed, linked evidence", "/check"],
+          ["02", "Shelf", "Review products and overlaps", "/shelf"],
+          ["03", "Care", "Request clinician interpretation", "/care"],
+          ["04", "Ledger", "Saved checks, spending and care", "/ledger"],
         ].map(([n, heading, text, href]) => <a href={href} key={n}><span className="step-number">{n}</span><h3>{heading}</h3><p>{text}</p></a>)}</div>
         <div className="band">AI reads, the rubric decides</div><p className="muted">Retrieval failure → incomplete; uncertainty stays visible.</p>
       </Slide>
       <Slide n={5} title="Money you can see" note="User-reported spending; no guaranteed savings or product safety conclusions.">
         <div className="facts">
-          <article><h3>Money kept</h3><p>Track purchases you decided to skip after checking.</p><a href="/history">Your spending ledger →</a></article>
-          <article><h3>Price of proof</h3><p>Evidence per dollar, graded live with our engine.</p><span className="muted">In development · routine page</span></article>
-          <article><h3>Overlap spend</h3><p>See monthly spending on products sharing active ingredients.</p><a href="/routine">Review your shelf →</a></article>
+          <article><h3>Money kept</h3><p>Track purchases you decided to skip after checking.</p><a href="/ledger">Your spending ledger →</a></article>
+          <article><h3>Price of proof</h3><p>Evidence per dollar, graded live with our engine.</p><span className="muted">Live grading · Shelf</span></article>
+          <article><h3>Overlap spend</h3><p>See monthly spending on products sharing active ingredients.</p><a href="/shelf">Review your shelf →</a></article>
         </div>
         <div className="band">Evidence before another purchase.</div>
       </Slide>
@@ -85,7 +85,7 @@ export default function DeckPage() {
       </Slide>
       <Slide n={9} title="Proof it works" note="Pilot: requests stay on-device; no payments, confirmed appointments, or clinician dispatch.">
         <div className="proof-numbers"><div><strong>12/12</strong><span>Recorded broad-direction regression passes</span></div><div><strong>Live</strong><span>PubMed retrieval, versioned reports</span></div></div>
-        <div className="split proof-details"><div><h3>Live evidence pipeline</h3><p>Extraction → PubMed → stance reading → rubric → sources</p><a href="/analyze">Check a claim →</a></div><div><h3>Return and share</h3><p>Money kept · share verdict · expert demo workspace</p><a href="/expert">Open expert workspace →</a></div></div>
+        <div className="split proof-details"><div><h3>Live evidence pipeline</h3><p>Extraction → PubMed → stance reading → rubric → sources</p><a href="/check">Check a claim →</a></div><div><h3>Return and share</h3><p>Money kept · share verdict · expert demo workspace</p><a href="/expert">Open expert workspace →</a></div></div>
         <p className="eval-caveat">Small team-labelled set; not held out. Earlier errors informed fixes; abstention can pass.</p>
         <details className="no-print"><summary>Details</summary><p>docs/EVAL.md: rules-v2, 14 November 2026. Regression evidence, not clinical accuracy or commercial traction.</p></details>
       </Slide>
@@ -98,7 +98,7 @@ export default function DeckPage() {
         </div>
         <div className="band">The ask: Stripe · clinician partners · HIPAA-ready backend · legal review</div>
         <details className="no-print"><summary>Strategy and pilot limits</summary>
-          <p>The graph grows with every check; stale claims re-check when History opens.</p>
+          <p>The graph grows with every check; stale claims re-check when Ledger opens.</p>
           <p>Expert decisions are device-local demos, without verified clinician identities.</p>
           <p>Clinician-reviewed labels and equipped visits require licensed partners before launch.</p>
           <p>Doctor brief connects personal context to optional paid care.</p>
@@ -110,8 +110,8 @@ export default function DeckPage() {
       .deck-toolbar { max-width:1280px; margin:0 auto 20px; display:flex; justify-content:flex-end; }
       .deck { max-width:1280px; margin:auto; }
       .slide-frame { width:100%; height:calc(720px * var(--deck-scale)); margin-bottom:24px; }
-      section.slide { position:relative; box-sizing:border-box; width:1280px; height:720px; padding:56px 64px 78px; background:#F8F3ED; color:#292326; border:1px solid #ded3ce; transform:scale(var(--deck-scale)); transform-origin:top left; overflow:hidden; font-family:var(--font-dm-sans),sans-serif; font-size:20px; line-height:1.45; }
-      .slide h1,.slide h2,.slide h3 { font-family:var(--font-dm-serif),Georgia,serif; font-weight:400; color:#512A35; line-height:1.05; letter-spacing:-.01em; margin:0; }
+      section.slide { position:relative; box-sizing:border-box; width:1280px; height:720px; padding:56px 64px 78px; background:#F8F3ED; color:#292326; border:1px solid #ded3ce; transform:scale(var(--deck-scale)); transform-origin:top left; overflow:hidden; font-family:var(--font-manrope),sans-serif; font-size:20px; line-height:1.45; }
+      .slide h1,.slide h2,.slide h3 { font-family:var(--font-newsreader),Georgia,serif; font-weight:400; color:#512A35; line-height:1.05; letter-spacing:-.01em; margin:0; }
       .slide h1 { font-size:96px; } .slide h2 { font-size:64px; } .slide h3 { font-size:32px; margin-bottom:24px; }
       .slide p { margin:16px 0; } .slide-content { margin-top:40px; } .slide footer { position:absolute; left:64px; right:64px; bottom:22px; padding-top:12px; border-top:1px solid #d9ccca; font-size:16px; color:#6E6266; }
       .slide-note { position:absolute; left:64px; right:64px; bottom:57px; font-size:16px; color:#6E6266; margin:0 !important; }

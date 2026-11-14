@@ -9,9 +9,9 @@
   --color-blush-pale: #ead9d5; /* highlight fills, selected backgrounds */
   --color-cream: #f8f3ed;      /* main background */
   --color-ink: #292326;        /* main text */
-  --color-success: #54765e;
-  --color-warning: #b77a35;
-  --color-danger: #a84d50;
+  --color-success: #2f7d5b;
+  --color-warning: #b5701a;
+  --color-danger: #a4262c;
 
   /* Semantic tokens used across the app */
   --color-canvas: var(--color-cream);
@@ -28,12 +28,12 @@
   /* Evidence verdicts (status only) */
   --color-support: var(--color-success);
   --color-partial: var(--color-warning);
-  --color-insufficient: #7a6e72;
-  --color-misleading: var(--color-danger);
-  --color-contradict: #7a2e33;
+  --color-insufficient: #56657a;
+  --color-misleading: #c2502b;
+  --color-contradict: var(--color-danger);
 
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-dm-serif), Georgia, ui-serif, serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-newsreader), Georgia, ui-serif, serif;
   --font-serif: var(--font-display);
   --font-mono: var(--font-dm-mono), ui-monospace, monospace;
   --animate-marquee: marquee 40s linear infinite;
@@ -70,7 +70,7 @@ a { text-underline-offset: 3px; }
 @utility chip { @apply min-h-9 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink/85; }
 @utility chip-lg { @apply chip min-h-11 px-4; }
 @utility field { @apply w-full rounded-md border border-line bg-surface px-4 py-3 text-ink placeholder:text-muted/80 outline-none transition focus:border-rose focus:ring-2 focus:ring-blush-pale; }
-@utility display { @apply font-[family-name:var(--font-display)] font-normal tracking-[-0.01em] leading-[1.05]; }
+@utility display { @apply font-[family-name:var(--font-display)] font-medium tracking-[-0.02em] leading-[1.02]; }
 @utility mark { @apply rounded-[3px] px-1 [box-decoration-break:clone] [-webkit-box-decoration-break:clone] bg-blush-pale shadow-[inset_0_-2px_0_var(--color-rose)]; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

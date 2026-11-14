@@ -1,5 +1,6 @@
 "use client";
 import { motion, type HTMLMotionProps } from "framer-motion";
+import { Check, CircleDashed, CircleHelp, TriangleAlert, X } from "lucide-react";
 import { VERDICTS, type Verdict } from "@/lib/types";
 
 /** Impeccable: "one authored moment, no section fades". Kept as a plain wrapper so call sites stay unchanged. */
@@ -9,17 +10,22 @@ export function Reveal({ delay = 0, initial, whileInView, viewport, transition, 
 }
 
 /** Verdict colour is reserved for the evidence label. */
+const VERDICT_ICON: Record<Verdict, typeof Check> = { supported: Check, partially_supported: CircleDashed, insufficient_evidence: CircleHelp, misleading: TriangleAlert, contradicted: X };
+
+/** Verdict label: tinted fill, strong text and an icon, so meaning never depends on colour alone. */
 export function VerdictBadge({ verdict, size = "md", stamp: _stamp = false }: { verdict: Verdict; size?: "sm" | "md" | "lg"; stamp?: boolean }) {
   void _stamp;
   const v = VERDICTS[verdict];
-  const cls = size === "lg" ? "px-5 py-2 text-base" : size === "sm" ? "px-2.5 py-0.5 text-base" : "px-3.5 py-1 text-base";
+  const Icon = VERDICT_ICON[verdict];
+  const cls = size === "lg" ? "px-4 py-2 text-base gap-2" : size === "sm" ? "px-2 py-0.5 text-sm gap-1" : "px-3 py-1 text-[15px] gap-1.5";
   return (
-    <motion.span
-      className={`inline-flex items-center gap-1.5 rounded-md border font-medium ${cls}`}
-      style={{ color: v.color, borderColor: `color-mix(in srgb, ${v.color} 35%, transparent)`, background: `color-mix(in srgb, ${v.color} 10%, transparent)` }}
+    <span
+      className={`inline-flex items-center rounded-md font-semibold ${cls}`}
+      style={{ color: v.color, background: `color-mix(in srgb, ${v.color} 13%, white)`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${v.color} 28%, transparent)` }}
     >
+      <Icon size={size === "lg" ? 18 : 15} strokeWidth={2.4} aria-hidden="true" />
       {v.label}
-    </motion.span>
+    </span>
   );
 }
 

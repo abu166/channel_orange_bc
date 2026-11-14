@@ -13,7 +13,7 @@ export default function SavingsPrompt({ label }: { label: string }) {
     return (
       <p className="text-base">
         <b className="text-success">{usd(saved * 12)} a year kept.</b>{" "}
-        <Link href="/history" className="text-rose underline">See your total</Link>
+        <Link href="/ledger" className="text-rose underline">See your total</Link>
       </p>
     );
   }

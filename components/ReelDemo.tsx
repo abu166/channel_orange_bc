@@ -157,11 +157,11 @@ export default function ReelDemo({ onRun }: { onRun: (claim: string) => void }) 
                   className="absolute inset-x-2 bottom-2 rounded-[14px] bg-cream p-4 text-ink shadow-[0_-8px_30px_-12px_rgb(0_0_0/0.45)]">
                   <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-ink/15" />
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-sm font-semibold"><span className="grid h-6 w-6 place-items-center rounded-md bg-burgundy font-[family-name:var(--font-display)] text-sm text-cream">V</span>VetoHealth checked this</span>
+                    <span className="flex items-center gap-2 text-sm font-semibold"><span className="grid h-6 w-6 place-items-center rounded-md bg-burgundy font-[family-name:var(--font-display)] text-sm text-cream">V</span>Example verdict</span>
                     <span className="rounded-md border px-2 py-0.5 text-xs font-semibold" style={{ color: v.color, borderColor: `color-mix(in srgb, ${v.color} 40%, transparent)`, background: `color-mix(in srgb, ${v.color} 10%, transparent)` }}>{v.label}</span>
                   </div>
                   <p className="mt-2 text-[15px] font-medium leading-snug">{p.line}</p>
-                  <p className="mt-1 text-xs text-muted">{p.studies} PubMed studies · from our live test run</p>
+                  <p className="mt-1 text-xs text-muted">Illustrative verdict · run for current evidence</p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -170,7 +170,7 @@ export default function ReelDemo({ onRun }: { onRun: (claim: string) => void }) 
       </div>
 
       <button onClick={() => onRun(p.claim)} className="mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-md border border-cream/50 px-5 text-[15px] font-medium text-cream transition-colors hover:border-cream hover:bg-cream/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream">
-        Check this claim live <ArrowRight size={16} />
+        Try this example <ArrowRight size={16} />
       </button>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getProfile } from "@/lib/ledger";
 import { listThreads } from "@/lib/store";
 import { analyzeRoutine, type RoutineProduct } from "@/lib/ingredients";
 import { listBookings } from "@/lib/booking";
@@ -13,6 +14,7 @@ type Section = "claims" | "routine" | "labs" | "questions";
 type Marker = { biomarker: string; value: string; unit: string | null; ref_text: string; appointment: string };
 
 export default function BriefPage() {
+  const [firstName, setFirstName] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [claims, setClaims] = useState<ClaimReport[]>([]);
@@ -25,6 +27,7 @@ export default function BriefPage() {
   useEffect(() => {
     try {
       setStatus("loading");
+      setFirstName(getProfile().firstName);
       // Probe storage so blocked access is reported instead of appearing empty.
       const raw: unknown = JSON.parse(localStorage.getItem("veto:routine") ?? "[]");
       if (!Array.isArray(raw)) throw new Error("Invalid shelf");
@@ -70,7 +73,8 @@ export default function BriefPage() {
 
   return (
     <article className="doctor-brief mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
-      <h1 className="display text-4xl sm:text-5xl">Your doctor brief</h1>
+      <Link href="/ledger" className="brief-controls btn-ghost mb-6 min-h-11">Back to ledger</Link>
+      <h1 className="display text-4xl sm:text-5xl">{firstName ? `${firstName}’s doctor brief` : "Your doctor brief"}</h1>
       <p className="mt-3 text-base text-muted">{date || "Preparing date"} · From your checks</p>
       {status === "loading" && <div className="mt-8" role="status"><p>Reading saved checks on this device.</p><progress className="mt-3 w-full accent-burgundy" aria-label="Reading saved checks" /></div>}
       {status === "error" && <div className="brief-controls mt-8" role="alert"><p>Saved checks could not be read.</p><button className="btn-primary mt-4" onClick={() => setAttempt(value => value + 1)}>Retry</button></div>}
@@ -79,9 +83,9 @@ export default function BriefPage() {
           <button className="btn-primary min-h-11" disabled={empty || !Object.values(included).some(Boolean)} onClick={() => window.print()}>Print or save PDF</button>
           <Link className="btn-ghost min-h-11" href="/labs">Discuss it in a ${SERVICES.lab_consult.price} consult</Link>
         </div>
-        {empty && <div className="brief-controls my-8 border-y border-line py-6"><h2 className="display text-2xl">Start with your checks</h2><p className="mt-2">Save a claim or routine to prepare your brief.</p><div className="mt-3 flex flex-wrap gap-4"><Link className="inline-flex min-h-11 items-center underline" href="/analyze">Check a claim</Link><Link className="inline-flex min-h-11 items-center underline" href="/routine">Check your routine</Link></div></div>}
+        {empty && <div className="brief-controls my-8 border-y border-line py-6"><h2 className="display text-2xl">Start with your checks</h2><p className="mt-2">Save a check or shelf to prepare your brief.</p><div className="mt-3 flex flex-wrap gap-4"><Link className="inline-flex min-h-11 items-center underline" href="/check">Check a claim</Link><Link className="inline-flex min-h-11 items-center underline" href="/shelf">Open your shelf</Link></div></div>}
         {!empty && <p className="my-4 text-base">Money kept from your checks: {usd(money)}/month.</p>}
-        {([ ["claims", "Claims I’m considering"], ["routine", "Routine overlaps & cautions"], ["labs", "Lab values to discuss"], ["questions", "Questions to ask"] ] as const).map(([key, title]) => (
+        {([ ["claims", "Claims I’m considering"], ["routine", "Shelf overlaps & cautions"], ["labs", "Lab values to discuss"], ["questions", "Questions to ask"] ] as const).map(([key, title]) => (
           <section key={key} className={`brief-section border-t border-line py-5 ${included[key] ? "" : "brief-excluded"}`}>
             <div className="flex items-center gap-3"><input id={`include-${key}`} type="checkbox" checked={included[key]} onChange={event => setIncluded(current => ({ ...current, [key]: event.target.checked }))} className="brief-controls h-5 w-5 shrink-0 accent-burgundy" /><h2 className="display text-2xl"><label className="flex min-h-11 cursor-pointer items-center" htmlFor={`include-${key}`}>{title}</label></h2></div>
             {included[key] && <div className="mt-3 space-y-3 break-words">
