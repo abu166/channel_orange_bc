@@ -83,7 +83,7 @@ function Analyzer() {
 
   async function resolveLink(raw = url) {
     if (busy.current || running || ocr.busy || !raw.trim()) return;
-    busy.current = true; setVideoBusy(true); setVideoStatus("Reading the link…"); setVideoError(""); setFallback(false); setEmbedSrc(null); setThread(null); setCreator("");
+    busy.current = true; setVideoBusy(true); setVideoStatus("Getting what the video says… (up to 30 s)"); setVideoError(""); setFallback(false); setEmbedSrc(null); setThread(null); setCreator("");
     retryVideo.current = () => { void resolveLink(raw); };
     try {
       const response = await fetch("/api/v1/links/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: raw }) });
