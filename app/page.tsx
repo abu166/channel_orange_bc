@@ -1,14 +1,14 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Reveal, SectionTitle, VerdictBadge } from "@/components/ui";
 import { VERDICTS, type Verdict } from "@/lib/types";
 import { PLANS, SERVICES } from "@/lib/pricing";
 import type { Mood } from "@/components/HeroScene";
+import ReelDemo from "@/components/ReelDemo";
 
 /** Real claims circulating on social media; tapping Vee checks one live. */
 const VIRAL = ["Seed oils are toxic", "Rosemary oil regrows hair", "Sugar causes acne", "Apple cider vinegar lowers blood sugar", "Cold plunges boost immunity", "Mouth taping improves sleep", "Ashwagandha reduces stress", "Red light therapy reduces wrinkles", "Creatine improves memory", "Coffee causes anxiety"];
@@ -18,72 +18,6 @@ const HeroScene = dynamic(() => import("@/components/HeroScene"), {
   ssr: false,
   loading: () => <div className="h-full w-full animate-pulse rounded-[10px] bg-blush-pale/40" />,
 });
-
-/** Example captions (synthetic creators). Verdicts and bottom lines are copied from our live test run on Nov 14 (docs/EVAL.md). */
-const DEMOS: { handle: string; caption: string; hit: string; claim: string; verdict: Verdict; line: string; studies: number }[] = [
-  { handle: "@glow.with.jess", caption: "Celery juice cured my eczema in 7 days trust the process", hit: "Celery juice cured my eczema in 7 days", claim: "Celery juice cures eczema.", verdict: "misleading", line: "Overhyped: the research doesn't back “cures”.", studies: 9 },
-  { handle: "@drskinfacts", caption: "Collagen peptides improve skin elasticity. Here's what the trials show", hit: "Collagen peptides improve skin elasticity", claim: "Collagen supplements improve skin elasticity.", verdict: "partially_supported", line: "Partly true: some human studies agree, but the effect is smaller than claimed.", studies: 10 },
-  { handle: "@biohack.bro", caption: "Vitamin C prevents colds. Megadose daily and never get sick", hit: "Vitamin C prevents colds", claim: "Vitamin C prevents the common cold.", verdict: "contradicted", line: "Probably not true: the strongest studies found no real effect.", studies: 9 },
-];
-
-
-function DemoCard({ onRun }: { onRun: (t: string) => void }) {
-  const [i, setI] = useState(0);
-  const [phase, setPhase] = useState(0); // 0 reel, 1 claim highlighted, 2 verdict sheet
-  useEffect(() => {
-    setPhase(0);
-    const t1 = setTimeout(() => setPhase(1), 1100);
-    const t2 = setTimeout(() => setPhase(2), 2300);
-    const t3 = setTimeout(() => setI((x) => (x + 1) % DEMOS.length), 7000);
-    return () => [t1, t2, t3].forEach(clearTimeout);
-  }, [i]);
-  const d = DEMOS[i];
-  const rest = d.caption.slice(d.hit.length);
-  return (
-    <div className="relative mx-auto w-full max-w-[360px]">
-      <div className="card relative p-3">
-        <AnimatePresence mode="wait">
-          <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-            {/* the "video" */}
-            <div className="relative h-56 overflow-hidden rounded-[10px] bg-blush-pale">
-              <div className="absolute left-4 right-4 top-4 flex items-center justify-between text-base font-semibold text-fg/70">
-                <span className="text-base">Reels</span>
-                <span className="text-base">Example post</span>
-              </div>
-              <span className="absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center text-burgundy">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M8 5v14l11-7z" /></svg>
-              </span>
-            </div>
-            {/* creator + caption */}
-            <div className="px-2 pt-4">
-              <div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-full bg-subtle text-base text-fg">{d.handle.slice(1, 3).toUpperCase()}</span><span className="text-base font-semibold">{d.handle}</span></div>
-              <p className="mt-2 text-base leading-snug text-fg/85">
-                <span className="font-semibold">{d.hit}</span>{rest}
-              </p>
-            </div>
-            {/* VetoHealth result sheet */}
-            <div className="mt-3 min-h-[124px]">
-              <AnimatePresence>
-                {phase >= 2 && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}
-                    className="rounded-md border border-line bg-cream px-3 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="flex items-center gap-2 text-base font-semibold"><span className="grid h-6 w-6 place-items-center bg-burgundy font-semibold text-base text-cream">V</span>VetoHealth checked this</span>
-                      <VerdictBadge verdict={d.verdict} size="sm" />
-                    </div>
-                    <p className="mt-2 text-base font-medium leading-snug">{d.line}</p>
-                    <p className="mt-1.5 text-base text-muted">{d.studies} PubMed studies · saved test result</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-      <button onClick={() => onRun(d.claim)} className="btn-on-dark mx-auto mt-6 flex text-base">Check claim <ArrowRight size={15} /></button>
-    </div>
-  );
-}
 
 export default function Home() {
   const router = useRouter();
@@ -139,7 +73,7 @@ export default function Home() {
               ))}
             </ol>
           </div>
-          <DemoCard onRun={go} />
+          <ReelDemo onRun={go} />
         </div>
       </section>
 
