@@ -5,9 +5,10 @@ import { aiExtract, llmEnabled, llmModel, refineStances } from "@/lib/llm";
 import { RUBRIC_VERSION, SCHEMA_VERSION, type Claim, type ClaimReport, type ContentType, type EvidenceSource, type Report, type StreamEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300; // long videos: up to 10 claims, 3 checked in parallel
 
-const MAX_CLAIMS = 4;
+const MAX_CLAIMS = 10;
+const PARALLEL = 3; // claims checked at once; PubMed calls still share one rate-limited throttle
 const hits = new Map<string, number[]>(); // best-effort per-instance rate limit
 const TYPES: ContentType[] = ["text", "screenshot_text", "transcript", "permitted_url_metadata"];
 
@@ -45,8 +46,8 @@ export async function POST(req: Request) {
         if (all.length > MAX_CLAIMS) warnings.push(`Found ${all.length} claims; checked the first ${MAX_CLAIMS}.`);
         send({ type: "claims", claims });
 
-        const results: ClaimReport[] = [];
-        for (const [i, claim] of claims.entries()) {
+        const results: ClaimReport[] = new Array(claims.length);
+        const checkClaim = async (claim: Claim, i: number) => {
           const q = buildQueries(claim);
           let complete = true;
           const byId = new Map<string, EvidenceSource>();
@@ -87,9 +88,14 @@ export async function POST(req: Request) {
           });
           if (hiddenOffTopic > 0) assessment.limitations.unshift(`${hiddenOffTopic} retrieved ${hiddenOffTopic === 1 ? "study was" : "studies were"} off-topic (checked by AI) and hidden.`);
           const result = { claim, evidence, assessment };
-          results.push(result);
+          results[i] = result;
           send({ type: "claim_done", index: i, result });
-        }
+        };
+        // Small worker pool: each verdict streams to the client as soon as it is ready.
+        const queue = claims.map((c, i) => [c, i] as const);
+        await Promise.all(Array.from({ length: Math.min(PARALLEL, claims.length) }, async () => {
+          for (let next = queue.shift(); next; next = queue.shift()) await checkClaim(next[0], next[1]);
+        }));
 
         const report: Report = {
           id: crypto.randomUUID(), version: 1, created_at: new Date().toISOString(),
