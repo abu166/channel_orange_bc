@@ -7,14 +7,28 @@ import type { Claim, EvidenceSource, Stance } from "./types";
  */
 interface Provider { name: string; kind: "openai" | "anthropic"; url: string; key: string; model: string }
 
-function provider(): Provider | null {
+/** Every configured provider, primary first. If the primary is rate-limited or down, the next one is tried. */
+function providers(): Provider[] {
   const env = process.env;
-  if (env.GROQ_API_KEY) return { name: "groq", kind: "openai", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.AI_MODEL || "auto" };
-  if (env.GEMINI_API_KEY) return { name: "gemini", kind: "openai", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: env.GEMINI_API_KEY, model: env.AI_MODEL || "gemini-flash-latest" };
-  if (env.OPENROUTER_API_KEY) return { name: "openrouter", kind: "openai", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: env.AI_MODEL || "meta-llama/llama-3.3-70b-instruct:free" };
-  if (env.ANTHROPIC_API_KEY) return { name: "anthropic", kind: "anthropic", url: "https://api.anthropic.com/v1/messages", key: env.ANTHROPIC_API_KEY, model: env.AI_MODEL || "claude-haiku-5-5" };
-  return null;
+  const list: Provider[] = [];
+  if (env.GROQ_API_KEY) list.push({ name: "groq", kind: "openai", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.AI_MODEL || "auto" });
+  if (env.GEMINI_API_KEY) list.push({ name: "gemini", kind: "openai", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-flash-latest" });
+  if (env.OPENROUTER_API_KEY) list.push({ name: "openrouter", kind: "openai", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free" });
+  if (env.ANTHROPIC_API_KEY) list.push({ name: "anthropic", kind: "anthropic", url: "https://api.anthropic.com/v1/messages", key: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || "claude-haiku-5-5" });
+  return list;
 }
+const provider = (): Provider | null => providers()[0] ?? null;
+
+/** At most AI_CONCURRENCY calls in flight (default 2), so one long video does not burst past per-minute token limits. */
+const MAX_AI = Math.max(1, Number(process.env.AI_CONCURRENCY ?? 2));
+let inFlight = 0;
+const waiting: (() => void)[] = [];
+async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (inFlight >= MAX_AI) await new Promise<void>((r) => waiting.push(r));
+  inFlight++;
+  try { return await fn(); } finally { inFlight--; waiting.shift()?.(); }
+}
+class LlmError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 export const llmEnabled = () => provider() !== null;
 export const llmModel = () => { const p = provider(); return p ? `${p.name}:${p.model === "auto" ? resolvedModel ?? "auto" : p.model}` : "none"; };
@@ -53,24 +67,31 @@ async function callOnce(p: Provider, system: string, user: string, timeoutMs: nu
     const msg = detail.match(/"message"\s*:\s*"([^"]{0,200})/)?.[1] ?? "";
     console.warn(`[llm] ${p.name}:${model} HTTP ${res.status} ${msg}`);
     if (res.status === 404 && p.model === "auto" && !retried) { resolvedModel = null; await resolveModel(p, true); return callOnce(p, system, user, timeoutMs, true); }
-    throw new Error(`LLM ${res.status}: ${msg}`);
+    const wait = Number(res.headers.get("retry-after"));
+    if (res.status === 429 && !retried && wait > 0 && wait <= 12) { await new Promise((r) => setTimeout(r, wait * 1000)); return callOnce(p, system, user, timeoutMs, true); }
+    throw new LlmError(res.status, `LLM ${res.status}: ${msg}`);
   }
   const data = await res.json();
   return p.kind === "anthropic" ? data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "" : data?.choices?.[0]?.message?.content ?? "";
 }
 
 /** JSON-only call with one retry on network/parse failure. Returns null instead of guessing. */
-async function chatJSON<T>(system: string, user: string, timeoutMs = 20_000): Promise<T | null> {
-  const p = provider();
-  if (!p) return null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const text = await callOnce(p, system, user, timeoutMs);
-      const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-      if (json) return JSON.parse(json) as T;
-    } catch { /* retry once, then give up */ }
-  }
-  return null;
+async function chatJSON<T>(system: string, user: string, timeoutMs = 25_000): Promise<T | null> {
+  return withSlot(async () => {
+    for (const p of providers()) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const text = await callOnce(p, system, user, timeoutMs);
+          const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+          if (json) return JSON.parse(json) as T;
+        } catch (e) {
+          // Rate limit / outage / auth problem: move on to the next provider instead of retrying this one.
+          if (e instanceof LlmError && (e.status === 429 || e.status >= 500 || e.status === 401 || e.status === 403)) break;
+        }
+      }
+    }
+    return null;
+  });
 }
 
 export interface AiClaim { verbatim: string; normalized: string; intervention: string; outcome: string; intervention_terms?: string[]; outcome_terms?: string[]; claim_type?: string }
@@ -88,7 +109,8 @@ export async function aiExtract(text: string): Promise<AiClaim[] | null> {
 /** Reads retrieved conclusions only; returns stance per PMID plus plain-English copy. */
 export async function refineStances(claim: Claim, evidence: EvidenceSource[]): Promise<{ stances: Map<string, Stance>; reasons: Map<string, string>; offTopic: Set<string>; bottomLine: string | null; explainer: string | null } | null> {
   if (!evidence.length) return null;
-  const sources = evidence.slice(0, 10).map((e) => `PMID ${e.pmid} [${e.study_design}, ${e.year}] ${e.title}\nConclusion: ${e.conclusion ?? "(no abstract)"}`).join("\n\n");
+  const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}…` : t);
+  const sources = evidence.slice(0, 8).map((e) => `PMID ${e.pmid} [${e.study_design}, ${e.year}] ${clip(e.title, 160)}\nConclusion: ${e.conclusion ? clip(e.conclusion, 420) : "(no abstract)"}`).join("\n\n");
   const out = await chatJSON<{ stances?: { pmid: string; stance: string; why?: string; on_topic?: boolean }[]; bottom_line?: string; explainer?: string }>(
     "You are a careful evidence analyst explaining research to a non-scientist. Reply with JSON only. Never give medical advice or doses.",
     `Claim: "${claim.normalized_text}"\n\nSources:\n${sources}\n\nClaim type: ${claim.claim_type}${claim.comparator ? `; it compares against ${claim.comparator}` : ""}.
