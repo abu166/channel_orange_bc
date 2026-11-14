@@ -1,177 +1,213 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion, useMotionTemplate, useMotionValue, useSpring } from "framer-motion";
-import { ArrowRight, BellRing, Check, FlaskConical, History, Layers, ScanLine, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight } from "lucide-react";
 import { Reveal, SectionTitle, VerdictBadge } from "@/components/ui";
 import { VERDICTS, type Verdict } from "@/lib/types";
+import { PLANS, SERVICES } from "@/lib/pricing";
 
-const DEMOS: { handle: string; caption: string; hit: string; verdict: Verdict; chips: string[] }[] = [
-  { handle: "@glow.with.jess", caption: "Celery juice cures eczema in 7 days 🌿 trust me #detox", hit: "Celery juice cures eczema in 7 days", verdict: "misleading", chips: ["Absolute wording: “cures”", "No trial supports it", "Counter-search ran"] },
-  { handle: "@drskinfacts", caption: "Collagen peptides improve skin elasticity — the data is surprisingly decent.", hit: "Collagen peptides improve skin elasticity", verdict: "supported", chips: ["Meta-analyses found", "Small, short trials", "Dose not stated"] },
-  { handle: "@biohack.bro", caption: "Vitamin C prevents the common cold. Megadose daily, never get sick.", hit: "Vitamin C prevents the common cold", verdict: "contradicted", chips: ["Systematic reviews: no prevention", "May shorten colds", "No doses given here"] },
+/** Example captions (synthetic creators). Verdicts and bottom lines are copied from our live test run on Nov 14 (docs/EVAL.md). */
+const DEMOS: { handle: string; caption: string; hit: string; claim: string; verdict: Verdict; line: string; studies: number }[] = [
+  { handle: "@glow.with.jess", caption: "Celery juice cured my eczema in 7 days trust the process", hit: "Celery juice cured my eczema in 7 days", claim: "Celery juice cures eczema.", verdict: "misleading", line: "Overhyped: the research doesn't back “cures”.", studies: 9 },
+  { handle: "@drskinfacts", caption: "Collagen peptides improve skin elasticity. Here's what the trials show", hit: "Collagen peptides improve skin elasticity", claim: "Collagen supplements improve skin elasticity.", verdict: "partially_supported", line: "Partly true: some human studies agree, but the effect is smaller than claimed.", studies: 10 },
+  { handle: "@biohack.bro", caption: "Vitamin C prevents colds. Megadose daily and never get sick", hit: "Vitamin C prevents colds", claim: "Vitamin C prevents the common cold.", verdict: "contradicted", line: "Probably not true: the strongest studies found no real effect.", studies: 9 },
 ];
-const VIRAL = ["Seed oils are toxic", "Rosemary oil regrows hair", "Sugar causes acne", "Apple cider vinegar lowers blood sugar", "Cold plunges boost immunity", "Mouth taping improves sleep", "Ashwagandha reduces stress", "Red light therapy reduces wrinkles", "Creatine improves memory", "Coffee causes anxiety"];
 
-function DemoCard() {
+
+function DemoCard({ onRun }: { onRun: (t: string) => void }) {
   const [i, setI] = useState(0);
-  const [phase, setPhase] = useState(0); // 0 scan, 1 highlight, 2 stamp
+  const [phase, setPhase] = useState(0); // 0 reel, 1 claim highlighted, 2 verdict sheet
   useEffect(() => {
     setPhase(0);
-    const t1 = setTimeout(() => setPhase(1), 1400);
-    const t2 = setTimeout(() => setPhase(2), 2200);
-    const t3 = setTimeout(() => setI((x) => (x + 1) % DEMOS.length), 6200);
+    const t1 = setTimeout(() => setPhase(1), 1100);
+    const t2 = setTimeout(() => setPhase(2), 2300);
+    const t3 = setTimeout(() => setI((x) => (x + 1) % DEMOS.length), 7000);
     return () => [t1, t2, t3].forEach(clearTimeout);
   }, [i]);
   const d = DEMOS[i];
-  const color = VERDICTS[d.verdict].color;
   const rest = d.caption.slice(d.hit.length);
   return (
-    <div className="relative mx-auto w-full max-w-[380px] animate-float">
-      <div className="absolute -inset-8 rounded-[48px] blur-3xl transition-colors duration-700" style={{ background: `color-mix(in srgb, ${color} 18%, transparent)` }} />
-      <div className="relative aspect-[9/14] overflow-hidden rounded-[32px] border border-white/10 bg-gradient-to-br from-[#2a1f3d] via-[#141418] to-[#0f2a22] shadow-2xl">
-        <div className="absolute inset-0 opacity-40 [background:radial-gradient(circle_at_30%_20%,#ff7ab655,transparent_45%),radial-gradient(circle_at_80%_70%,#3affc455,transparent_40%)]" />
-        <div className="absolute left-4 right-4 top-4 flex items-center justify-between text-[11px] text-white/70">
-          <span className="font-mono">Reels</span><span className="chip !border-white/10 !bg-black/30 !py-0.5 !text-[10px]">Illustration</span>
-        </div>
+    <div className="relative mx-auto w-full max-w-[360px]">
+      <div className="card relative p-3">
         <AnimatePresence mode="wait">
-          <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-x-0 bottom-0 p-5">
-            <div className="mb-3 flex items-center gap-2"><span className="h-7 w-7 rounded-full bg-gradient-to-br from-pink-400 to-amber-300" /><span className="text-sm font-semibold">{d.handle}</span></div>
-            <p className="text-[17px] leading-snug">
-              <motion.span animate={{ backgroundColor: phase >= 1 ? `color-mix(in srgb, ${color} 28%, transparent)` : "rgba(0,0,0,0)" }} className="rounded box-decoration-clone px-0.5" style={{ boxShadow: phase >= 1 ? `inset 0 -2px 0 ${color}` : "none" }}>{d.hit}</motion.span>{rest}
-            </p>
-            <div className="mt-4 flex min-h-[64px] flex-wrap gap-1.5">
-              {phase >= 2 && d.chips.map((c, k) => (
-                <motion.span key={c} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 + k * 0.12 }} className="chip !border-white/10 !bg-black/50 backdrop-blur">{c}</motion.span>
-              ))}
+          <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+            {/* the "video" */}
+            <div className="relative h-56 overflow-hidden rounded-[10px] bg-blush-pale">
+              <div className="absolute left-4 right-4 top-4 flex items-center justify-between text-base font-semibold text-fg/70">
+                <span className="text-base">Reels</span>
+                <span className="text-base">Example post</span>
+              </div>
+              <span className="absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center text-burgundy">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M8 5v14l11-7z" /></svg>
+              </span>
+            </div>
+            {/* creator + caption */}
+            <div className="px-2 pt-4">
+              <div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-full bg-subtle text-base text-fg">{d.handle.slice(1, 3).toUpperCase()}</span><span className="text-base font-semibold">{d.handle}</span></div>
+              <p className="mt-2 text-base leading-snug text-fg/85">
+                <span className="font-semibold">{d.hit}</span>{rest}
+              </p>
+            </div>
+            {/* VetoHealth result sheet */}
+            <div className="mt-3 min-h-[124px]">
+              <AnimatePresence>
+                {phase >= 2 && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}
+                    className="rounded-md border border-line bg-cream px-3 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 text-base font-semibold"><span className="grid h-6 w-6 place-items-center bg-burgundy font-semibold text-base text-cream">V</span>VetoHealth checked this</span>
+                      <VerdictBadge verdict={d.verdict} size="sm" />
+                    </div>
+                    <p className="mt-2 text-base font-medium leading-snug">{d.line}</p>
+                    <p className="mt-1.5 text-base text-muted">{d.studies} PubMed studies · saved test result</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </AnimatePresence>
-        {phase === 0 && <div className="absolute inset-x-0 top-10 h-24 animate-scan bg-gradient-to-b from-transparent via-signal/25 to-transparent [--scan-h:320px]"><div className="absolute bottom-1/2 h-px w-full bg-signal shadow-[0_0_20px_var(--color-signal)]" /></div>}
-        <div className="absolute right-5 top-[38%]">{phase >= 2 && <VerdictBadge key={i} verdict={d.verdict} size="lg" stamp />}</div>
       </div>
+      <button onClick={() => onRun(d.claim)} className="btn-ghost mx-auto mt-6 flex text-base">Check claim <ArrowRight size={15} /></button>
     </div>
   );
 }
 
 export default function Home() {
-  const mx = useMotionValue(50), my = useMotionValue(20);
-  const sx = useSpring(mx, { stiffness: 80, damping: 20 }), sy = useSpring(my, { stiffness: 80, damping: 20 });
-  const bg = useMotionTemplate`radial-gradient(700px circle at ${sx}% ${sy}%, rgb(215 255 58 / 0.09), transparent 60%)`;
-  const words = ["Health", "advice", "goes", "viral."];
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const go = (t: string) => router.push(`/analyze?q=${encodeURIComponent(t)}&run=1`);
 
   return (
     <>
-      <section className="relative overflow-hidden" onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); mx.set(((e.clientX - r.left) / r.width) * 100); my.set(((e.clientY - r.top) / r.height) * 100); }}>
-        <motion.div className="pointer-events-none absolute inset-0" style={{ background: bg }} />
-        <div className="pointer-events-none absolute inset-0 grid-bg" />
+      <section className="relative overflow-hidden">
         <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-16 sm:px-6 md:grid-cols-[1.25fr_1fr] md:pt-24">
           <div>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="chip mb-8"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal" /> Live PubMed evidence · no sign-up</motion.p>
-            <h1 className="display text-[clamp(3.2rem,8vw,6.6rem)]">
-              {words.map((w, k) => (
-                <motion.span key={w} initial={{ opacity: 0, y: 40, rotate: 4 }} animate={{ opacity: 1, y: 0, rotate: 0 }} transition={{ delay: 0.1 + k * 0.08, duration: 0.8, ease: [0.22, 1, 0.36, 1] }} className="mr-[0.22em] inline-block">{w}</motion.span>
-              ))}
-              <br />
-              <motion.em initial={{ opacity: 0, filter: "blur(12px)" }} animate={{ opacity: 1, filter: "blur(0px)" }} transition={{ delay: 0.6, duration: 1 }} className="text-signal">Evidence doesn&apos;t.</motion.em>
+            <h1 className="display text-[clamp(3.2rem,8vw,6rem)]">
+              Health claims.<br />
+              <span className="mark">Checked.</span>
             </h1>
-            <Reveal delay={0.7}>
-              <p className="mt-7 max-w-lg text-lg leading-relaxed text-bone/70">
-                VetoHealth checks the health claims you see on Reels, TikTok and product labels against real research. It shows you
-                the studies that agree, the studies that don&apos;t, and says so when the evidence is too thin to call.
+            <Reveal delay={0.15}>
+              <p className="mt-7 max-w-lg text-lg leading-relaxed text-fg/80">
+                Check your feed against published research.
               </p>
-              <div className="mt-9 flex flex-wrap gap-3">
-                <Link href="/analyze" className="btn-primary text-base">Veto a claim <ArrowRight size={17} /></Link>
-                <Link href="/routine" className="btn-ghost text-base">Check my routine</Link>
+              <form onSubmit={(e) => { e.preventDefault(); if (q.trim().length >= 8) go(q); }} className="mt-8 flex max-w-xl flex-col gap-2 rounded-[10px] border border-line bg-surface p-2  focus-within:ring-2 focus-within:ring-rose sm:flex-row">
+                <label htmlFor="hero-q" className="sr-only">Health claim</label>
+                <input id="hero-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Paste a claim you saw… e.g. “ice baths boost immunity”" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base outline-none placeholder:text-muted focus-visible:outline-2 focus-visible:outline-burgundy rounded-[10px]" />
+                <button disabled={q.trim().length < 8} className="btn-primary">Check this claim <ArrowRight size={16} /></button>
+              </form>
+              <p className="mt-3 text-base text-muted">Check before you buy. Track the money you keep.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-base">
+                <span className="text-fg/80">Or try:</span>
+                {["Vitamin C prevents the common cold.", "Collagen improves skin elasticity.", "Celery juice cures eczema."].map((t) => (
+                  <button key={t} onClick={() => go(t)} className="chip-lg max-w-full whitespace-normal text-left hover:!border-rose hover:!text-burgundy">{t.replace(".", "")} →</button>
+                ))}
               </div>
+              <Link href="/routine" className="mt-6 inline-flex min-h-11 items-center gap-1 text-base text-fg/80 hover:text-fg">Check your routine <ArrowRight size={14} /></Link>
             </Reveal>
           </div>
-          <motion.div initial={{ opacity: 0, scale: 0.92, rotate: 3 }} animate={{ opacity: 1, scale: 1, rotate: 0 }} transition={{ delay: 0.3, duration: 1, ease: [0.22, 1, 0.36, 1] }}><DemoCard /></motion.div>
+          <DemoCard onRun={go} />
         </div>
       </section>
 
-      <div className="relative border-y border-line bg-ink-2/60 py-4 [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
-        <div className="flex w-max animate-marquee gap-3 hover:[animation-play-state:paused]">
-          {[...VIRAL, ...VIRAL].map((c, k) => (
-            <Link key={k} href={`/analyze?q=${encodeURIComponent(c + ".")}`} className="chip shrink-0 !px-4 !py-2 text-sm transition hover:!border-signal hover:!text-signal">“{c}” <ArrowRight size={13} /></Link>
-          ))}
+      <div className="border-y border-line bg-surface">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-4 px-4 py-6 text-base text-muted sm:px-6">
+          {["Live PubMed search", "Studies that disagree, shown too", "No sign-up"].map((fact) => <span key={fact}>{fact}</span>)}
         </div>
       </div>
 
-      <section className="mx-auto max-w-6xl px-4 pt-32 sm:px-6">
-        <SectionTitle eyebrow="How it works" title={<>Four steps from scroll<br />to <em className="text-signal">receipts.</em></>} sub="A real pipeline, streaming live while you watch. No canned answers, no made-up citations." />
-        <div className="grid gap-4 md:grid-cols-4">
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <SectionTitle title="Start here" sub="Choose a check." />
+        <ul className="divide-y divide-line border-y border-line">
           {[
-            { n: "01", icon: ScanLine, t: "Paste or snap", d: "Text, a screenshot (OCR runs in your browser) or a Reel transcript with its link kept as provenance." },
-            { n: "02", icon: Layers, t: "Split into claims", d: "Compound posts become atomic claims, with dose, population and duration pulled out or flagged as missing." },
-            { n: "03", icon: Search, t: "Search both sides", d: "We query PubMed for support and run a separate search for null results, so the counter-evidence shows up too." },
-            { n: "04", icon: FlaskConical, t: "Weigh, don't count", d: "Meta-analyses outrank mouse studies. Five verdicts, an explicit abstain, and limitations always on screen." },
+            { href: "/analyze", title: "Check a claim", description: "Read the research behind your feed." },
+            { href: "/labs", title: "Understand my blood test", description: "Compare results with your lab’s reference ranges." },
+            { href: "/routine", title: "Check my skincare & supplements", description: "Find duplicates to discuss with a clinician." },
+            { href: "/visit", title: "Book a home skin check", description: "Request a licensed partner clinician." },
+          ].map((item) => (
+            <li key={item.href}>
+              <Link href={item.href} className="group grid min-h-11 grid-cols-[1fr_auto] items-center gap-x-6 gap-y-2 py-6 sm:grid-cols-[1fr_1fr_auto]">
+                <h3 className="display text-left text-2xl group-hover:text-burgundy sm:col-start-1 sm:row-start-1 sm:text-3xl">{item.title}</h3>
+                <p className="col-start-1 row-start-2 max-w-[65ch] text-base text-muted sm:col-start-2 sm:row-start-1">{item.description}</p>
+                <ArrowRight aria-hidden="true" size={20} className="col-start-2 row-start-1 justify-self-end text-burgundy transition-transform group-hover:translate-x-1 sm:col-start-3" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mx-auto max-w-6xl border-t border-line px-4 py-16 sm:py-24 sm:px-6">
+        <SectionTitle eyebrow="How it works" title="How it works" sub="" />
+        <ol className="divide-y divide-line border-t border-line">
+          {[
+            { n: "01", t: "Paste or snap", d: "Bring a claim, screenshot, or Reel transcript." },
+            { n: "02", t: "Split into claims", d: "Separate claims and flag missing details." },
+            { n: "03", t: "Search both sides", d: "Find supporting and conflicting research." },
+            { n: "04", t: "Weigh, don't count", d: "Read the verdict and its sources." },
           ].map((s, k) => (
-            <Reveal key={s.n} delay={k * 0.08} className="card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:border-signal/30">
-              <span className="absolute -right-3 -top-6 font-serif text-[110px] italic leading-none text-white/[.04] transition group-hover:text-signal/10">{s.n}</span>
-              <s.icon size={22} strokeWidth={1.5} className="text-signal" />
-              <h3 className="mt-6 text-lg font-semibold">{s.t}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-mute">{s.d}</p>
+            <li key={s.n} className="grid grid-cols-[2rem_1fr] gap-4 py-6 sm:grid-cols-[3rem_1fr_1.5fr]">
+              <span className="text-lg text-muted">{k + 1}.</span>
+              <h3 className="display text-2xl">{s.t}</h3>
+              <p className="col-start-2 max-w-[65ch] text-base text-fg/80 sm:col-start-auto">{s.d}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="mx-auto max-w-6xl border-t border-line px-4 py-16 sm:py-24 sm:px-6">
+        <SectionTitle title="The verdict scale" sub="Thin evidence gets an uncertain verdict." />
+        <table className="w-full border-collapse text-left text-base">
+          <thead><tr className="border-y border-line"><th scope="col" className="w-2/5 py-4 pr-4 font-medium sm:w-64">Verdict</th><th scope="col" className="py-4 font-medium">What it means</th></tr></thead>
+          <tbody>
+            {(Object.keys(VERDICTS) as Verdict[]).map((v) => (
+              <tr key={v} className="border-b border-line">
+                <th scope="row" className="py-5 pr-4 align-top font-normal"><VerdictBadge verdict={v} size="sm" /></th>
+                <td className="py-5 align-top text-ink/80">{VERDICTS[v].blurb}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="mx-auto max-w-6xl border-t border-line px-4 py-16 sm:py-24 sm:px-6">
+        <SectionTitle eyebrow="Beyond one claim" title={<>Explore partner care</>} sub="Services from licensed partner clinicians." />
+        <div className="grid gap-x-10 md:grid-cols-[1.2fr_1fr]">
+          {Object.values(SERVICES).map((service, k) => (
+            <Reveal key={service.id} delay={k * 0.06} className={`flex flex-col border-t border-line py-7 ${k === 0 ? "md:row-span-2 md:pr-10" : ""}`}>
+              
+              <h3 className={k === 0 ? "display mt-4 text-4xl" : "mt-4 text-xl font-semibold"}>{service.name} · ${service.price}</h3>
+              <p className="mt-2 text-base text-muted">{service.mode}</p>
+              <details className="mt-3 flex-1 text-base text-fg/80"><summary className="min-h-11 cursor-pointer">Details</summary><p>{service.short}</p></details>
+              <Link href={service.id.startsWith("lab") ? "/labs" : "/visit"} className="mt-5 inline-flex min-h-11 items-center gap-2 text-base text-burgundy">Request service <ArrowRight size={16} /></Link>
             </Reveal>
           ))}
         </div>
+
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pt-32 sm:px-6">
-        <SectionTitle eyebrow="The verdict scale" title={<>Five verdicts.<br /><em className="text-signal">One honest abstain.</em></>} />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {(Object.keys(VERDICTS) as Verdict[]).map((v, k) => (
-            <Reveal key={v} delay={k * 0.06} className="card p-5">
-              <VerdictBadge verdict={v} size="sm" />
-              <p className="mt-4 text-sm leading-relaxed text-bone/70">{VERDICTS[v].blurb}</p>
-            </Reveal>
+      <section id="pricing" className="mx-auto max-w-6xl scroll-mt-24 border-t border-line px-4 py-16 sm:py-24 sm:px-6">
+        <SectionTitle title="Choose your care" sub="Claim and routine checks are free." />
+        <div className="grid border-y border-line md:grid-cols-3">
+          {PLANS.filter((p) => p.id !== "free").map((p) => (
+            <div key={p.id} className={`flex flex-col border-b border-line px-5 py-8 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0 ${p.id === "skin" ? "bg-burgundy text-cream" : ""}`}>
+              <h3 className="display text-3xl">{p.name}</h3>
+              <p className="mt-5"><span className="display text-4xl">${p.monthly}</span><span className="text-base"> / month</span></p>
+              <p className="mt-3 text-base">{p.commitment}</p>
+              <details className="mt-4 flex-1 text-base"><summary className="min-h-11 cursor-pointer">Details</summary><p>{p.tagline}</p></details>
+              <Link href="/plans" className={`mt-6 inline-flex min-h-11 items-center gap-2 text-base font-medium ${p.id === "skin" ? "text-cream" : "text-burgundy"}`}>Explore {p.name} <ArrowRight size={16} /></Link>
+            </div>
           ))}
         </div>
+        <p className="mt-5 text-base text-muted">Pilot: local requests; no payment or clinician dispatched.</p>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pt-32 sm:px-6">
-        <SectionTitle eyebrow="Beyond one claim" title={<>A habit, <em className="text-signal">not a tab.</em></>} sub="Why people come back tomorrow." />
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            { icon: Sparkles, t: "Routine checker", d: "Add your serums and supplements. We catch duplicate actives (two retinoids, vitamin A from three bottles) and risky pairings, with NIH sources.", href: "/routine", cta: "Check my shelf" },
-            { icon: History, t: "Versioned history", d: "Every report is saved with its evidence snapshot. Re-check later: the new version sits next to the old one, never overwriting it.", href: "/history", cta: "Open history" },
-            { icon: BellRing, t: "Evidence-changed alerts", d: "Plus members get pinged when new research moves a verdict on a claim they saved. Science updates, so should you.", href: "#pricing", cta: "See Plus" },
-          ].map((f, k) => (
-            <Reveal key={f.t} delay={k * 0.08} className="card flex flex-col p-7">
-              <f.icon size={22} strokeWidth={1.5} className="text-signal" />
-              <h3 className="mt-6 text-xl font-semibold">{f.t}</h3>
-              <p className="mt-3 flex-1 text-sm leading-relaxed text-mute">{f.d}</p>
-              <Link href={f.href} className="mt-6 inline-flex items-center gap-1 text-sm text-signal hover:gap-2 transition-all">{f.cta} <ArrowRight size={14} /></Link>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      <section id="pricing" className="mx-auto max-w-6xl scroll-mt-24 px-4 pt-32 sm:px-6">
-        <SectionTitle eyebrow="Pricing" title={<>Cheaper than one<br /><em className="text-signal">bad supplement.</em></>} />
-        <div className="grid gap-4 md:grid-cols-2">
-          {[
-            { name: "Free", price: "$0", per: "forever", items: ["3 claim checks a day", "Routine checker", "History on this device"], cta: "Start checking", hot: false },
-            { name: "Plus", price: "$7.99", per: "/ month · $59 / year", items: ["Unlimited checks + screenshot & label scan", "Evidence-changed alerts on saved claims", "Synced history across devices", "Routine monitoring as you add products"], cta: "Try Plus free for 7 days", hot: true },
-          ].map((p, k) => (
-            <Reveal key={p.name} delay={k * 0.1} className={`card relative overflow-hidden p-8 ${p.hot ? "!border-signal/40" : ""}`}>
-              {p.hot && <div className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full bg-signal/15 blur-3xl" />}
-              <p className="eyebrow">{p.name}</p>
-              <p className="mt-4"><span className="display text-6xl">{p.price}</span> <span className="text-sm text-mute">{p.per}</span></p>
-              <ul className="mt-6 space-y-3">{p.items.map((i) => <li key={i} className="flex items-start gap-2 text-sm text-bone/80"><Check size={16} className="mt-0.5 shrink-0 text-signal" />{i}</li>)}</ul>
-              <Link href="/analyze" className={`${p.hot ? "btn-primary" : "btn-ghost"} mt-8 w-full`}>{p.cta}</Link>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-4 pt-32 sm:px-6">
-        <Reveal className="card relative overflow-hidden p-10 text-center sm:p-16">
-          <div className="pointer-events-none absolute inset-0 grid-bg opacity-60" />
-          <ShieldCheck size={28} strokeWidth={1.5} className="relative mx-auto text-signal" />
-          <h2 className="display relative mx-auto mt-6 max-w-3xl text-5xl sm:text-7xl">Before you believe it, <em className="text-signal">veto it.</em></h2>
-          <p className="relative mx-auto mt-5 max-w-lg text-mute">No fake citations. No doses. No confident guesses when the science is thin.</p>
-          <Link href="/analyze" className="btn-primary relative mt-9 text-base">Check your first claim <ArrowRight size={17} /></Link>
+      <section className="mx-auto max-w-6xl border-t border-line px-4 py-16 sm:py-24 sm:px-6">
+        <Reveal className="relative overflow-hidden rounded-[10px] bg-burgundy p-8 text-center text-cream sm:p-16">
+          
+          <h2 className="display relative mx-auto max-w-3xl text-5xl sm:text-7xl">Check a claim</h2>
+          <p className="relative mx-auto mt-5 max-w-lg text-base text-cream">Read the studies and their limits.</p>
+          <Link href="/analyze" className="btn relative mt-9 bg-surface text-base text-burgundy hover:bg-subtle">Check a claim <ArrowRight size={17} /></Link>
         </Reveal>
       </section>
     </>

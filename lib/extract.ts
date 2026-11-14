@@ -55,7 +55,7 @@ export const ENTITIES: Entity[] = [
   E("eczema", "outcome", "dermatology", "atopic dermatitis OR eczema", ["atopic dermatitis"]),
   E("hyperpigmentation", "outcome", "dermatology", "hyperpigmentation OR melasma", ["dark spots", "melasma", "pigmentation"]),
   E("hair loss", "outcome", "dermatology", "alopecia", ["alopecia", "balding", "thinning hair"]),
-  E("hair growth", "outcome", "dermatology", "hair growth OR alopecia", ["hair regrowth", "grow hair", "thicker hair"]),
+  E("hair growth", "outcome", "dermatology", "hair growth OR alopecia", ["hair regrowth", "grow hair", "regrows hair", "regrow hair", "thicker hair"]),
   E("skin cancer", "outcome", "dermatology", "skin neoplasms OR melanoma", ["melanoma"]),
   E("sleep", "outcome", "sleep", "sleep quality OR sleep", ["insomnia", "sleep quality", "fall asleep"]),
   E("anxiety", "outcome", "mental_health", "anxiety"),
@@ -94,6 +94,9 @@ const QUAL: Record<keyof Qualifiers, RegExp> = {
   population: /\b(?:women|men|kids|children|adults|elderly|older adults|seniors|pregnant|athletes|teens|teenagers|babies|infants|postmenopausal|menopausal|people with [a-z]+)\b/i,
   route: /\b(?:topical(?:ly)?|oral(?:ly)?|appl(?:y|ied|ying)|drink(?:ing)?|eat(?:ing)?|tak(?:e|ing)|supplement(?:ing|s)?|cream|serum|pills?|capsules?|tea|juice|injections?|rub(?:bing)?|massage)\b/i,
 };
+
+const COMPARE = /\b(?:as (?:well|good|effective|strong|powerful) as|better than|more effective than|works like|just like|same as|instead of|replaces?|replacement for|alternative to|outperforms?|beats?|stronger than)\s+(?:a |an |the )?([a-z0-9-]+(?:\s(?!and\b|or\b|for\b|in\b)[a-z0-9-]+)?)/i;
+export const comparatorOf = (t: string) => t.match(COMPARE)?.[1]?.trim().toLowerCase() ?? null;
 
 const STOP = new Set("the a an and or but if then this that these those it its is are was were be been being to of in on for with as at by from your you my our their they them we i he she his her will can could should would just really very so too also than more most much many any some every all no not do does did have has had get gets got make makes made thing things stuff people anyone everyone way day night morning".split(" "));
 
@@ -218,6 +221,8 @@ export function extractClaims(input: string): { claims: Claim[]; nonClaims: stri
         source_offsets: { start: seg.start, end: seg.end },
         is_paraphrase: paraphrase,
         extraction_confidence: Math.round(conf * 100) / 100,
+        comparator: comparatorOf(norm),
+        extracted_by: "rules",
       });
     }
   }
@@ -229,4 +234,27 @@ export const isNegatedClaim = (t: string) => NEGATION.test(t);
 /** Content words used as a fallback when the dictionary misses. */
 export function keywords(t: string): string[] {
   return [...new Set(t.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter((w) => w.length > 3 && !STOP.has(w) && !CLAIM_VERBS.test(w)))].slice(0, 4);
+}
+
+/** Turns an AI-extracted claim into a validated Claim: offsets must point at an exact span, otherwise it is flagged as a paraphrase. */
+export function claimFromAi(input: string, c: { verbatim: string; normalized: string; intervention: string; outcome: string; claim_type?: string }): Claim {
+  const at = c.verbatim ? input.indexOf(c.verbatim) : -1;
+  const norm = clean(c.normalized).replace(/[.!;]+$/, "");
+  const ents = findEntities(`${norm} ${c.intervention} ${c.outcome}`);
+  const term = (label: string) => { const hit = findEntities(label)[0]; return { label: label.toLowerCase(), q: hit ? hit.q : label.replace(/["()\[\]]/g, "") }; };
+  const qualifiers = Object.fromEntries((Object.keys(QUAL) as (keyof Qualifiers)[]).map((k) => [k, norm.match(QUAL[k])?.[0] ?? null])) as unknown as Qualifiers;
+  const types: Claim["claim_type"][] = ["efficacy", "safety", "prevention", "mechanism", "dosage", "diagnosis"];
+  const claim_type = types.includes(c.claim_type as Claim["claim_type"]) ? (c.claim_type as Claim["claim_type"]) : typeOf(norm);
+  const domain = domainOf(ents);
+  const missing: (keyof Qualifiers)[] = [];
+  if (!qualifiers.population) missing.push("population");
+  if (!qualifiers.duration) missing.push("duration");
+  if (["supplements", "nutrition"].includes(domain) && !qualifiers.dose) missing.push("dose");
+  return {
+    claim_id: uuid(), verbatim_text: at >= 0 ? c.verbatim : norm, normalized_text: norm.charAt(0).toUpperCase() + norm.slice(1),
+    domain, claim_type, entities: [...new Set([c.intervention.toLowerCase(), c.outcome.toLowerCase(), ...ents.map((e) => e.name)])].filter(Boolean).slice(0, 4),
+    qualifiers, missing_qualifiers: missing, overclaim_terms: [...new Set((norm.match(OVERCLAIM) ?? []).map((x) => x.toLowerCase()))],
+    source_offsets: at >= 0 ? { start: at, end: at + c.verbatim.length } : { start: 0, end: 0 }, is_paraphrase: at < 0,
+    extraction_confidence: at >= 0 ? 0.85 : 0.6, comparator: comparatorOf(norm), search_terms: [term(c.intervention), term(c.outcome)].filter((t) => t.label), extracted_by: "ai",
+  };
 }

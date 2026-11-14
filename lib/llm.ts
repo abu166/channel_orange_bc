@@ -1,33 +1,72 @@
 import type { Claim, EvidenceSource, Stance } from "./types";
 
 /**
- * Optional LLM stance checker. Only runs when ANTHROPIC_API_KEY is set. The model may ONLY label sources we
- * actually retrieved; any PMID it returns that we didn't send is discarded (no fabricated citations).
+ * Pluggable LLM layer. Works with FREE tiers: Groq (default) or Google Gemini via their OpenAI-compatible APIs,
+ * plus OpenRouter or Anthropic. The LLM never decides the verdict: it (1) extracts claims from messy text and
+ * (2) reads each study's conclusion. Every PMID it returns is checked against what we actually retrieved.
  */
-export const llmEnabled = () => !!process.env.ANTHROPIC_API_KEY;
-export const llmModel = () => process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
+interface Provider { name: string; kind: "openai" | "anthropic"; url: string; key: string; model: string }
 
-export async function refineStances(claim: Claim, evidence: EvidenceSource[]): Promise<{ stances: Map<string, Stance>; summary: string | null } | null> {
-  if (!llmEnabled() || !evidence.length) return null;
-  const sources = evidence.slice(0, 10).map((e) => `PMID ${e.pmid} [${e.study_design}, ${e.year}] ${e.title}\nConclusion: ${e.conclusion ?? "(no abstract)"}`).join("\n\n");
-  const prompt = `Claim: "${claim.normalized_text}"\n\nSources:\n${sources}\n\nFor each PMID decide if its conclusion SUPPORTS the claim as worded, CONTRADICTS it (finds no effect or the opposite), or is NEUTRAL (off-topic, mixed, or no abstract). Then write a 2-sentence plain-English summary for a non-expert, referencing only these sources, without medical advice or doses. Reply with JSON only: {"stances":[{"pmid":"…","stance":"supports|contradicts|neutral"}],"summary":"…"}`;
+function provider(): Provider | null {
+  const env = process.env;
+  if (env.GROQ_API_KEY) return { name: "groq", kind: "openai", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.AI_MODEL || "llama-3.3-70b-versatile" };
+  if (env.GEMINI_API_KEY) return { name: "gemini", kind: "openai", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: env.GEMINI_API_KEY, model: env.AI_MODEL || "gemini-flash-latest" };
+  if (env.OPENROUTER_API_KEY) return { name: "openrouter", kind: "openai", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: env.AI_MODEL || "meta-llama/llama-3.3-70b-instruct:free" };
+  if (env.ANTHROPIC_API_KEY) return { name: "anthropic", kind: "anthropic", url: "https://api.anthropic.com/v1/messages", key: env.ANTHROPIC_API_KEY, model: env.AI_MODEL || "claude-haiku-5-5" };
+  return null;
+}
+
+export const llmEnabled = () => provider() !== null;
+export const llmModel = () => { const p = provider(); return p ? `${p.name}:${p.model}` : "none"; };
+
+async function chatJSON<T>(system: string, user: string, timeoutMs = 20_000): Promise<T | null> {
+  const p = provider();
+  if (!p) return null;
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: AbortSignal.timeout(20_000),
-      headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: llmModel(), max_tokens: 900, system: "You are a careful evidence analyst. Output strict JSON only.", messages: [{ role: "user", content: prompt }] }),
-    });
+    const res = p.kind === "anthropic"
+      ? await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", "x-api-key": p.key, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model: p.model, max_tokens: 1500, system, messages: [{ role: "user", content: user }] }) })
+      : await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", authorization: `Bearer ${p.key}` },
+          body: JSON.stringify({ model: p.model, temperature: 0.1, max_tokens: 1500, messages: [{ role: "system", content: system }, { role: "user", content: user }] }) });
     if (!res.ok) return null;
     const data = await res.json();
-    const text: string = data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "";
-    const parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
-    const allowed = new Set(evidence.map((e) => e.pmid));
-    const stances = new Map<string, Stance>();
-    for (const s of parsed?.stances ?? []) if (allowed.has(String(s.pmid)) && ["supports", "contradicts", "neutral"].includes(s.stance)) stances.set(String(s.pmid), s.stance);
-    const summary = typeof parsed?.summary === "string" && parsed.summary.length < 600 ? parsed.summary : null;
-    return { stances, summary };
+    const text: string = p.kind === "anthropic" ? data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "" : data?.choices?.[0]?.message?.content ?? "";
+    const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+    return json ? (JSON.parse(json) as T) : null;
   } catch {
     return null;
   }
+}
+
+export interface AiClaim { verbatim: string; normalized: string; intervention: string; outcome: string; claim_type?: string }
+
+/** Claim extraction for messy captions/transcripts. Output is validated and enriched by lib/extract.ts. */
+export async function aiExtract(text: string): Promise<AiClaim[] | null> {
+  const out = await chatJSON<{ claims?: AiClaim[] }>(
+    "You extract checkable health claims from social-media text for a fact-checking tool. Reply with JSON only.",
+    `Text:\n"""${text.slice(0, 4000)}"""\n\nReturn {"claims":[{"verbatim":"exact substring copied from the text","normalized":"one atomic claim in plain English, keeping any dose, population or duration","intervention":"short PubMed search term for the thing (e.g. rosemary oil)","outcome":"short PubMed search term for the effect (e.g. alopecia)","claim_type":"efficacy|safety|prevention|mechanism|dosage|diagnosis"}]}.\nRules: split compound sentences into separate claims; skip questions, jokes, opinions without a factual health assertion, ads and non-health statements; use medical terms for search fields; at most 5 claims; empty list if none.`,
+  );
+  if (!out?.claims || !Array.isArray(out.claims)) return null;
+  return out.claims.filter((c) => c && typeof c.normalized === "string" && typeof c.intervention === "string" && c.normalized.length > 5).slice(0, 5);
+}
+
+/** Reads retrieved conclusions only; returns stance per PMID plus plain-English copy. */
+export async function refineStances(claim: Claim, evidence: EvidenceSource[]): Promise<{ stances: Map<string, Stance>; reasons: Map<string, string>; bottomLine: string | null; explainer: string | null } | null> {
+  if (!evidence.length) return null;
+  const sources = evidence.slice(0, 10).map((e) => `PMID ${e.pmid} [${e.study_design}, ${e.year}] ${e.title}\nConclusion: ${e.conclusion ?? "(no abstract)"}`).join("\n\n");
+  const out = await chatJSON<{ stances?: { pmid: string; stance: string; why?: string }[]; bottom_line?: string; explainer?: string }>(
+    "You are a careful evidence analyst explaining research to a non-scientist. Reply with JSON only. Never give medical advice or doses.",
+    `Claim: "${claim.normalized_text}"\n\nSources:\n${sources}\n\nFor each PMID: "supports" if its conclusion backs the claim as worded, "contradicts" if it found no effect or the opposite, "neutral" if off-topic, mixed or no abstract. Add "why": max 14 plain words on what that study found (e.g. "Trial in 100 women: less wrinkling after 12 weeks").\nThen write "bottom_line": max 18 words a 30-year-old would get instantly (e.g. "Some small studies show a modest effect, but not a cure."), and "explainer": 2-3 short sentences on what the studies actually found, mentioning study types, using only these sources.\nReturn {"stances":[{"pmid":"…","stance":"…","why":"…"}],"bottom_line":"…","explainer":"…"}`,
+  );
+  if (!out) return null;
+  const allowed = new Set(evidence.map((e) => e.pmid));
+  const stances = new Map<string, Stance>();
+  const reasons = new Map<string, string>();
+  for (const s of out.stances ?? []) {
+    if (!allowed.has(String(s.pmid)) || !["supports", "contradicts", "neutral"].includes(s.stance)) continue;
+    stances.set(String(s.pmid), s.stance as Stance);
+    if (typeof s.why === "string" && s.why.length < 160) reasons.set(String(s.pmid), s.why.trim());
+  }
+  const clean = (s: unknown, max: number) => (typeof s === "string" && s.length > 3 && s.length < max ? s.trim() : null);
+  return { stances, reasons, bottomLine: clean(out.bottom_line, 200), explainer: clean(out.explainer, 700) };
 }

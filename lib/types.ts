@@ -1,6 +1,6 @@
 /** Shared, versioned contracts (mirrors the VetoHealth spec §5.1, §5.4, §7.2). */
 export const SCHEMA_VERSION = "veto.claims.v1";
-export const RUBRIC_VERSION = "rubric-2026.11-a";
+export const RUBRIC_VERSION = "rubric-2026.11-b";
 
 export type Verdict = "supported" | "partially_supported" | "insufficient_evidence" | "misleading" | "contradicted";
 export type Stance = "supports" | "contradicts" | "neutral";
@@ -35,6 +35,11 @@ export interface Claim {
   source_offsets: { start: number; end: number };
   is_paraphrase: boolean;
   extraction_confidence: number;
+  /** "as good as minoxidil" → "minoxidil": comparison claims need head-to-head evidence. */
+  comparator: string | null;
+  /** PubMed terms (from AI extraction or the dictionary). */
+  search_terms?: { label: string; q: string }[];
+  extracted_by: "rules" | "ai";
 }
 
 export interface EvidenceSource {
@@ -53,6 +58,11 @@ export interface EvidenceSource {
   stance: Stance;
   relevance: number;
   rationale: string;
+  /** Human study with a design that can count as proof (not animal, case report or narrative review). */
+  counts_as_proof: boolean;
+  mentions_comparator: boolean;
+  /** One-line reason from the AI reader, if enabled. */
+  ai_reason: string | null;
   retrieved_via: "primary" | "contradiction";
 }
 
@@ -62,6 +72,11 @@ export interface Assessment {
   confidence_score: number;
   confidence_interpretation: "uncalibrated_internal_score";
   summary: string;
+  /** One plain-English sentence for non-experts. */
+  bottom_line: string;
+  plain_explainer: string | null;
+  strength_label: "Strong" | "Moderate" | "Weak" | "Very weak";
+  ai_used: boolean;
   supporting_source_ids: string[];
   contradictory_source_ids: string[];
   neutral_source_ids: string[];
@@ -81,7 +96,7 @@ export interface Report {
   id: string;
   version: number;
   created_at: string;
-  input: { content_type: ContentType; text: string; source_url: string | null; language: string };
+  input: { content_type: ContentType; text: string; source_url: string | null; language: string; /** Social creator handle the claim came from, e.g. "@biohack.bro" (user-supplied or parsed from a TikTok URL). */ creator?: string | null };
   status: "succeeded" | "needs_review" | "insufficient_input" | "failed";
   claims: ClaimReport[];
   warnings: string[];

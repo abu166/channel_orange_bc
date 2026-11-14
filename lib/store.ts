@@ -5,7 +5,7 @@ import type { Report } from "./types";
 export interface Challenge { id: string; created_at: string; claim_id: string; source_url: string; explanation: string; status: "submitted" | "in_review" }
 export interface Thread { id: string; title: string; created_at: string; updated_at: string; versions: Report[]; challenges: Challenge[] }
 
-const KEY = "veto:threads";
+const KEY = "veto:threads:v2"; // v2: report schema with bottom_line, evidence ladder fields
 const read = (): Thread[] => { try { return JSON.parse(localStorage.getItem(KEY) ?? "[]"); } catch { return []; } };
 const write = (t: Thread[]) => { try { localStorage.setItem(KEY, JSON.stringify(t.slice(0, 50))); } catch { /* storage full or blocked */ } window.dispatchEvent(new Event("veto:store")); };
 
@@ -14,7 +14,10 @@ export const getThread = (id: string) => read().find((t) => t.id === id) ?? null
 
 export function saveReport(report: Report, threadId?: string): Thread {
   const all = read();
-  const existing = threadId ? all.find((t) => t.id === threadId) : undefined;
+  const normalize = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
+  const existing = threadId
+    ? all.find((t) => t.id === threadId)
+    : all.find((t) => t.versions[0] && normalize(t.versions[0].input.text) === normalize(report.input.text));
   if (existing) {
     const v = { ...report, version: existing.versions.length + 1 };
     existing.versions.push(v);
@@ -40,7 +43,7 @@ export function deleteThread(id: string) { write(read().filter((t) => t.id !== i
 
 /** Runs the streaming analysis and reports progress. */
 export async function runAnalysis(
-  body: { text: string; content_type: string; source_url?: string | null },
+  body: { text: string; content_type: string; source_url?: string | null; creator?: string | null },
   on: (e: import("./types").StreamEvent) => void,
 ): Promise<Report> {
   const res = await fetch("/api/v1/claims/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
