@@ -66,7 +66,8 @@ async function callOnce(p: Provider, system: string, user: string, timeoutMs: nu
     : await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", authorization: `Bearer ${p.key}` },
         body: JSON.stringify({
           model, temperature: 0, max_tokens: 2000,
-          ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
+          // Reasoning models think before answering; keep it short so checks stay fast (Gemini 3 maps this to its thinking level).
+          ...(model.startsWith("openai/gpt-oss") || p.name === "gemini" ? { reasoning_effort: "low" } : {}),
           // Groq and OpenRouter support strict JSON mode; it guarantees a parseable object.
           ...(p.name === "groq" || p.name === "openrouter" ? { response_format: { type: "json_object" } } : {}),
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
@@ -153,7 +154,7 @@ export async function aiStatus(): Promise<{ provider: string; model: string; ok:
   if (!list.length) return [{ provider: "none", model: "none", ok: false, error: "No AI key configured" }];
   return Promise.all(list.map(async (p) => {
     try {
-      const text = await callOnce(p, "Reply with JSON only.", 'Return {"ok":true} as JSON.', 15_000);
+      const text = await callOnce(p, "Reply with JSON only.", 'Return {"ok":true} as JSON.', 30_000);
       return { provider: p.name, model: resolved.get(p.name) ?? p.model, ok: /"ok"\s*:\s*true/.test(text), error: null };
     } catch (e) {
       return { provider: p.name, model: resolved.get(p.name) ?? p.model, ok: false, error: e instanceof Error ? e.message : "unknown error" };
