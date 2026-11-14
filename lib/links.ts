@@ -31,3 +31,30 @@ export function tikTokEmbedSrc(html: unknown): string | null {
     return url.protocol === "https:" && url.hostname === "www.tiktok.com" && !url.port && !url.username && !url.password && url.pathname.startsWith("/player/") ? url.toString() : null;
   } catch { return null; }
 }
+
+/**
+ * Pilot: reads the public caption that TikTok embeds in its own video page (the page any browser loads,
+ * no login). This is not an official API; it runs once per user paste, never downloads the video, and
+ * can be switched off with TIKTOK_PUBLIC_CAPTIONS=off. Replace with TikTok's Display API after app approval.
+ */
+export function extractTikTokCaption(html: string): { caption: string; handle: string | null } | null {
+  const script = html.match(/<script[^>]+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/);
+  if (script) {
+    try {
+      const data = JSON.parse(script[1]);
+      const item = data?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct;
+      if (item && typeof item.desc === "string" && item.desc.trim()) {
+        const handle = typeof item.author?.uniqueId === "string" ? `@${item.author.uniqueId}` : null;
+        return { caption: item.desc.trim().slice(0, 2000), handle };
+      }
+    } catch { /* fall through to the narrow pattern */ }
+  }
+  const m = html.match(/"desc":"((?:[^"\\]|\\.){3,2000})"/);
+  if (!m) return null;
+  try {
+    const caption = (JSON.parse(`"${m[1]}"`) as string).trim();
+    return caption ? { caption, handle: null } : null;
+  } catch {
+    return null;
+  }
+}

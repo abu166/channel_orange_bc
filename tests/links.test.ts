@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseVideoLink, tikTokEmbedSrc } from "../lib/links";
+import { extractTikTokCaption, parseVideoLink, tikTokEmbedSrc } from "../lib/links";
 import { POST } from "../app/api/v1/links/resolve/route";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -50,5 +50,20 @@ describe("official link resolver", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("timeout")));
     const response = await POST(request("https://youtu.be/abc"));
     expect(response.status).toBe(502); expect(await response.json()).toMatchObject({ error: "provider_unavailable" });
+  });
+});
+
+
+describe("extractTikTokCaption", () => {
+  it("reads desc and author from the rehydration JSON", () => {
+    const json = JSON.stringify({ __DEFAULT_SCOPE__: { "webapp.video-detail": { itemInfo: { itemStruct: { desc: "Celery juice cures eczema #detox", author: { uniqueId: "glow.with.jess" } } } } } });
+    const html = `<html><script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">${json}</script></html>`;
+    expect(extractTikTokCaption(html)).toEqual({ caption: "Celery juice cures eczema #detox", handle: "@glow.with.jess" });
+  });
+  it("falls back to the desc field and decodes escapes", () => {
+    expect(extractTikTokCaption('{"desc":"Vitamin C \\u2014 prevents colds"}')?.caption).toBe("Vitamin C — prevents colds");
+  });
+  it("returns null when no caption is present", () => {
+    expect(extractTikTokCaption("<html>login</html>")).toBeNull();
   });
 });

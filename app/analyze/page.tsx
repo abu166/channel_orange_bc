@@ -208,7 +208,7 @@ function Analyzer() {
                   </form>
                   <input ref={videoInput} type="file" accept=".mp4,.mov,.webm,.m4a,.mp3" aria-label="Choose video or audio" className="sr-only" disabled={running || videoBusy}
                     onChange={e => { const file = e.target.files?.[0]; if (file) void readVideo(file); e.target.value = ""; }} />
-                  {fallback && <p className="text-base text-muted">TikTok and Instagram don&apos;t share captions with apps. Drop the video or a screenshot and we&apos;ll read it on your device.</p>}
+                  {fallback && <p className="text-base text-muted">We couldn&apos;t read this post&apos;s caption (Instagram needs a login). Drop the video or a screenshot and we&apos;ll read it on your device.</p>}
                   <div className="flex flex-wrap gap-3">
                     <button type="button" disabled={running || videoBusy} onClick={() => videoInput.current?.click()} className={fallback ? "btn-primary min-h-11" : "btn-ghost min-h-11"}>Drop the video</button>
                     {fallback && <button type="button" className="btn-ghost min-h-11" disabled={running || videoBusy} onClick={() => setMode("screenshot")}>Use a screenshot</button>}
