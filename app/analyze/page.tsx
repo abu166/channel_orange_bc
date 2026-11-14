@@ -3,9 +3,15 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Clapperboard, ExternalLink, ImageUp, Loader2, Type, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import ReportView from "@/components/ReportView";
+import type { Mood } from "@/components/HeroScene";
+import { VERDICTS, type Verdict } from "@/lib/types";
 import { runAnalysis, saveReport, type Thread } from "@/lib/store";
 import type { Claim, StreamEvent } from "@/lib/types";
+
+const Vee = dynamic(() => import("@/components/HeroScene"), { ssr: false, loading: () => <div className="h-full w-full rounded-[10px] bg-blush-pale/40" /> });
+const moodFor = (v: Verdict): Mood => (v === "supported" || v === "partially_supported" ? "good" : v === "insufficient_evidence" ? "unsure" : "bad");
 
 const SAMPLES = [
   "Collagen supplements reduce wrinkles and improve skin elasticity.",
@@ -92,14 +98,14 @@ function Analyzer() {
     <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-16 sm:px-6">
       <motion.div className="relative mb-10">
 
-        <h1 className="display text-5xl sm:text-7xl">Check a health claim</h1>
+        <h1 className="page-heading">Check a health claim</h1>
         <p className="mt-5 max-w-xl text-lg text-muted">Compare a claim with PubMed research.</p>
       </motion.div>
 
-      <motion.div className="card relative p-6 sm:p-8">
+      <motion.div className="card relative p-4 sm:p-8">
         <div className="mb-5 flex flex-wrap border-b border-line" role="group" aria-label="Input format">
           {([["text", "Text", Type], ["screenshot", "Screenshot", ImageUp], ["reel", "Reel or TikTok", Clapperboard]] as const).map(([id, label, Icon]) => (
-            <button key={id} aria-pressed={mode === id} onClick={() => setMode(id)} className={`relative flex flex-1 items-center justify-center min-h-11 gap-1.5 border-b-2 px-2 py-2.5 text-base focus-visible:outline-2 focus-visible:outline-burgundy ${mode === id ? "border-burgundy text-burgundy" : "border-transparent text-muted hover:text-ink"}`}>
+            <button key={id} aria-pressed={mode === id} onClick={() => setMode(id)} className={`relative flex min-w-0 flex-1 flex-col sm:flex-row items-center justify-center min-h-11 gap-1.5 border-b-2 px-1 py-2.5 text-sm sm:text-base focus-visible:outline-2 focus-visible:outline-burgundy ${mode === id ? "border-burgundy text-burgundy" : "border-transparent text-muted hover:text-ink"}`}>
 
               <Icon size={20} strokeWidth={1.75} className="relative" /><span className="relative">{label}</span>
             </button>
@@ -132,7 +138,7 @@ function Analyzer() {
             )}
             <div className="relative">
               <label htmlFor="claim" className="sr-only">Claim text</label>
-              <textarea id="claim" value={text} onChange={(e) => setText(e.target.value)} rows={mode === "text" ? 6 : 5} maxLength={6000}
+              <textarea id="claim" value={text} onChange={(e) => setText(e.target.value)} rows={5} maxLength={6000}
                 placeholder={mode === "reel" ? "Paste the transcript here…" : "e.g. “Collagen supplements reduce wrinkles and improve skin elasticity.”"}
                 className="field resize-none !rounded-[10px] !border-transparent !bg-transparent pr-14 text-lg leading-relaxed sm:text-xl"
                 onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canRun) analyze(); }} />
@@ -150,6 +156,32 @@ function Analyzer() {
           </button>
         </div>
       </motion.div>
+
+      {(running || thread) && (() => {
+        const first = thread?.versions.at(-1)?.claims[0]?.assessment;
+        const mood: Mood = running ? "checking" : first ? moodFor(first.verdict) : "unsure";
+        return (
+          <div className="card mt-6 grid items-center gap-2 overflow-hidden sm:grid-cols-[200px_1fr]">
+            <div className="h-44 sm:h-48"><Vee mood={mood} compact /></div>
+            <div className="px-5 pb-5 sm:px-0 sm:pb-0 sm:pr-6" aria-live="polite">
+              {running ? (
+                <>
+                  <p className="eyebrow">Vee is checking</p>
+                  <p className="mt-1 text-xl font-medium">{stage?.message ?? "Connecting to PubMed…"}</p>
+                </>
+              ) : first ? (
+                <>
+                  <p className="eyebrow">Vee&apos;s read</p>
+                  <p className="mt-1 text-xl font-medium" style={{ color: VERDICTS[first.verdict].color }}>{VERDICTS[first.verdict].label}</p>
+                  <p className="mt-1 max-w-[60ch] text-base text-fg/80">{first.bottom_line}</p>
+                </>
+              ) : (
+                <p className="text-xl font-medium">No checkable claim found.</p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <AnimatePresence>
         {running && (

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -7,6 +8,16 @@ import { ArrowRight } from "lucide-react";
 import { Reveal, SectionTitle, VerdictBadge } from "@/components/ui";
 import { VERDICTS, type Verdict } from "@/lib/types";
 import { PLANS, SERVICES } from "@/lib/pricing";
+import type { Mood } from "@/components/HeroScene";
+
+/** Real claims circulating on social media; tapping Vee checks one live. */
+const VIRAL = ["Seed oils are toxic", "Rosemary oil regrows hair", "Sugar causes acne", "Apple cider vinegar lowers blood sugar", "Cold plunges boost immunity", "Mouth taping improves sleep", "Ashwagandha reduces stress", "Red light therapy reduces wrinkles", "Creatine improves memory", "Coffee causes anxiety"];
+
+// The 3D mascot loads on the client only, with a calm placeholder while three.js downloads.
+const HeroScene = dynamic(() => import("@/components/HeroScene"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded-[10px] bg-blush-pale/40" />,
+});
 
 /** Example captions (synthetic creators). Verdicts and bottom lines are copied from our live test run on Nov 14 (docs/EVAL.md). */
 const DEMOS: { handle: string; caption: string; hit: string; claim: string; verdict: Verdict; line: string; studies: number }[] = [
@@ -69,7 +80,7 @@ function DemoCard({ onRun }: { onRun: (t: string) => void }) {
           </motion.div>
         </AnimatePresence>
       </div>
-      <button onClick={() => onRun(d.claim)} className="btn-ghost mx-auto mt-6 flex text-base">Check claim <ArrowRight size={15} /></button>
+      <button onClick={() => onRun(d.claim)} className="btn-on-dark mx-auto mt-6 flex text-base">Check claim <ArrowRight size={15} /></button>
     </div>
   );
 }
@@ -77,14 +88,16 @@ function DemoCard({ onRun }: { onRun: (t: string) => void }) {
 export default function Home() {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const go = (t: string) => router.push(`/analyze?q=${encodeURIComponent(t)}&run=1`);
+  const [mood, setMood] = useState<Mood>("idle");
+  const go = (t: string) => { setMood("checking"); router.push(`/analyze?q=${encodeURIComponent(t)}&run=1`); };
+  const poke = () => go(`${VIRAL[Math.floor(Math.random() * VIRAL.length)]}.`);
 
   return (
     <>
       <section className="relative overflow-hidden">
-        <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-16 sm:px-6 md:grid-cols-[1.25fr_1fr] md:pt-24">
-          <div>
-            <h1 className="display text-[clamp(3.2rem,8vw,6rem)]">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 pb-12 pt-10 sm:px-6 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] md:py-20">
+          <div className="min-w-0">
+            <h1 className="display text-[clamp(3rem,6.5vw,5.5rem)]">
               Health claims.<br />
               <span className="mark">Checked.</span>
             </h1>
@@ -94,7 +107,7 @@ export default function Home() {
               </p>
               <form onSubmit={(e) => { e.preventDefault(); if (q.trim().length >= 8) go(q); }} className="mt-8 flex max-w-xl flex-col gap-2 rounded-[10px] border border-line bg-surface p-2  focus-within:ring-2 focus-within:ring-rose sm:flex-row">
                 <label htmlFor="hero-q" className="sr-only">Health claim</label>
-                <input id="hero-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Paste a claim you saw… e.g. “ice baths boost immunity”" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base outline-none placeholder:text-muted focus-visible:outline-2 focus-visible:outline-burgundy rounded-[10px]" />
+                <input id="hero-q" value={q} onChange={(e) => { setQ(e.target.value); setMood(e.target.value ? "typing" : "idle"); }} onBlur={() => !q && setMood("idle")} placeholder="Paste a claim you saw… e.g. “ice baths boost immunity”" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base outline-none placeholder:text-muted focus-visible:outline-2 focus-visible:outline-burgundy rounded-[10px]" />
                 <button disabled={q.trim().length < 8} className="btn-primary">Check this claim <ArrowRight size={16} /></button>
               </form>
               <p className="mt-3 text-base text-muted">Check before you buy. Track the money you keep.</p>
@@ -106,6 +119,25 @@ export default function Home() {
               </div>
               <Link href="/routine" className="mt-6 inline-flex min-h-11 items-center gap-1 text-base text-fg/80 hover:text-fg">Check your routine <ArrowRight size={14} /></Link>
             </Reveal>
+          </div>
+          <div className="relative min-w-0">
+            <div className="h-[260px] sm:h-[360px] md:h-[460px]"><HeroScene mood={mood} onPoke={poke} /></div>
+            <button onClick={poke} className="mx-auto mt-1 flex min-h-11 items-center gap-2 rounded-md px-3 text-base text-fg/80 hover:text-burgundy">
+              Tap Vee for a viral claim <ArrowRight size={15} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-burgundy text-cream">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 md:grid-cols-[1fr_1fr]">
+          <div>
+            <h2 className="display text-4xl text-cream sm:text-6xl">Watch a Reel get checked.</h2>
+            <ol className="mt-8 divide-y divide-cream/15 border-y border-cream/15 text-lg">
+              {["Paste the caption or link.", "We search PubMed, both sides.", "Get a verdict with sources."].map((step, i) => (
+                <li key={step} className="flex items-baseline gap-4 py-4"><span className="font-[family-name:var(--font-display)] text-2xl text-blush">{i + 1}</span><span className="text-cream/90">{step}</span></li>
+              ))}
+            </ol>
           </div>
           <DemoCard onRun={go} />
         </div>
@@ -127,7 +159,7 @@ export default function Home() {
             { href: "/visit", title: "Book a home skin check", description: "Request a licensed partner clinician." },
           ].map((item) => (
             <li key={item.href}>
-              <Link href={item.href} className="group grid min-h-11 grid-cols-[1fr_auto] items-center gap-x-6 gap-y-2 py-6 sm:grid-cols-[1fr_1fr_auto]">
+              <Link href={item.href} className="group rounded-md transition-colors duration-150 hover:bg-subtle focus-visible:bg-subtle grid min-h-11 grid-cols-[1fr_auto] items-center gap-x-6 gap-y-2 py-6 sm:grid-cols-[1fr_1fr_auto]">
                 <h3 className="display text-left text-2xl group-hover:text-burgundy sm:col-start-1 sm:row-start-1 sm:text-3xl">{item.title}</h3>
                 <p className="col-start-1 row-start-2 max-w-[65ch] text-base text-muted sm:col-start-2 sm:row-start-1">{item.description}</p>
                 <ArrowRight aria-hidden="true" size={20} className="col-start-2 row-start-1 justify-self-end text-burgundy transition-transform group-hover:translate-x-1 sm:col-start-3" />

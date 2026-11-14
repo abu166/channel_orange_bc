@@ -25,7 +25,7 @@ export default function Nav() {
   const path = usePathname();
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-cream text-ink">
-      <nav aria-label="Primary" className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <nav aria-label="Primary" className="mx-auto flex min-h-16 min-w-0 gap-3 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" aria-label="VetoHealth home" className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-2 focus-visible:outline-burgundy"><Logo /></Link>
         <div className="hidden items-center gap-0.5 lg:flex">
           {links.map((l) => {
@@ -37,9 +37,9 @@ export default function Nav() {
             );
           })}
         </div>
-        <Link href="/analyze" className="btn-primary !py-2 text-base">Check a claim</Link>
+        <Link href="/analyze" className="btn-primary shrink-0 !px-3 !py-2 text-sm sm:!px-5 sm:text-base">Check a claim</Link>
       </nav>
-      <nav aria-label="Mobile primary" className="flex gap-1 overflow-x-auto px-4 pb-2 lg:hidden">
+      <nav aria-label="Mobile primary" className="flex min-w-0 max-w-full gap-1 overflow-x-auto overscroll-x-contain px-4 pb-2 lg:hidden">
         {links.map((l) => (
           <Link key={l.href} href={l.href} aria-current={path.startsWith(l.href) ? "page" : undefined} className={`inline-flex items-center px-3 py-2.5 min-h-11 shrink-0 border-b-2 text-[15px] ${path.startsWith(l.href) ? "border-burgundy font-medium text-burgundy" : "border-transparent text-muted hover:text-burgundy"}`}>{l.label}</Link>
         ))}

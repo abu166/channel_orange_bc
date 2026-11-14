@@ -90,17 +90,17 @@ export default function LabsPage() {
     setBooking(saved); setError(""); setStep(3);
   }
   return <section className="relative mx-auto max-w-6xl px-4 pt-16 sm:px-6 [&_.eyebrow]:text-base [&_.chip]:text-base [&_button]:min-h-11 [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-burgundy [&_input:not([type=checkbox]):not([type=file])]:min-h-11">
-    <Reveal className="relative mb-10"><h1 className="display text-5xl sm:text-7xl">Your numbers.<br />A real conversation.</h1><p className="max-w-[65ch] mt-5 max-w-xl text-lg text-muted">Review your lab report with a licensed partner clinician.</p><a href="#lab-report" className="btn-primary mt-6">Review my report</a></Reveal>
+    <Reveal className="relative mb-10"><h1 className="page-heading">Your numbers.<br />A real conversation.</h1><p className="max-w-[65ch] mt-5 max-w-xl text-lg text-muted">Review your lab report with a licensed partner clinician.</p><a href="#lab-report" className="btn-primary mt-6">Review my report</a></Reveal>
     <ol aria-label="Lab consult progress" className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">{steps.map((label, i) => <li key={label} aria-current={i === step ? "step" : undefined} className={`border-t-2 pt-3 text-base ${i <= step ? "border-burgundy text-burgundy" : "border-line text-muted"}`}><span className="mr-2 tabular-nums">{i + 1}.</span>{label}</li>)}</ol>
     <div id="lab-report" ref={card} className="scroll-mt-24">
     <AnimatePresence mode="wait"><motion.div onAnimationComplete={() => heading.current?.focus({ preventScroll: true })} key={step} initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0 }} className="relative border-t border-line py-6 sm:py-8">
       {step === 0 && <div className="space-y-5">
-        <h2 ref={heading} tabIndex={-1} className="display text-3xl">Start with your report.</h2>
-        <div className="border-y border-line py-4"><label htmlFor="lab-upload" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) void upload(f); }} className="flex cursor-pointer flex-col items-center gap-3 rounded-md border border-dashed border-line p-8 text-center focus-within:border-rose">
+        <h2 ref={heading} tabIndex={-1} className="display text-3xl focus-visible:outline-none">Start with your report.</h2>
+        <div className="border-y border-line py-4"><label htmlFor="lab-upload" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) void upload(f); }} className="flex cursor-pointer flex-col items-center gap-3 rounded-md border border-dashed border-rose/50 bg-surface px-4 py-12 text-center transition-colors hover:bg-subtle focus-within:ring-2 focus-within:ring-rose">
           <input id="lab-upload" aria-label="Upload lab report PDF or photo" type="file" accept="application/pdf,image/*" disabled={!!busy} className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
           {busy ? <Loader2 size={20} className="animate-spin text-fg" /> : null}<span role="status">{busy || "Upload PDF or photo"}</span><span className="text-base text-muted">8 MB maximum · clear, single-column reports</span>
         </label>
-        <button className="btn-primary mx-auto mt-3 flex min-h-11" disabled={!!busy} onClick={() => load(SAMPLE_REPORT)}>Try sample</button></div>
+        <button className="btn-ghost mx-auto mt-3 flex min-h-11" disabled={!!busy} onClick={() => load(SAMPLE_REPORT)}>Try sample</button></div>
         
         <p className="max-w-[65ch] text-base text-muted">Synthetic sample · photos read on-device · PDFs processed without storage.</p>
       </div>}
