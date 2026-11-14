@@ -92,9 +92,9 @@ async function callOnce(p: Provider, system: string, user: string, timeoutMs: nu
 }
 
 /** JSON-only call with one retry on network/parse failure. Returns null instead of guessing. */
-async function chatJSON<T>(system: string, user: string, timeoutMs = 25_000): Promise<T | null> {
+async function chatJSON<T>(system: string, user: string, timeoutMs = 25_000, only?: Provider["name"][]): Promise<T | null> {
   return withSlot(async () => {
-    for (const p of providers()) {
+    for (const p of providers().filter((x) => !only || only.includes(x.name))) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const text = await callOnce(p, system, user, timeoutMs);
@@ -160,4 +160,37 @@ export async function aiStatus(): Promise<{ provider: string; model: string; ok:
       return { provider: p.name, model: resolved.get(p.name) ?? p.model, ok: false, error: e instanceof Error ? e.message : "unknown error" };
     }
   }));
+}
+
+/* ------------------------------ lab results (sensitive health data) ------------------------------ */
+// Lab text and values go ONLY to providers that don't train on API data by default (Groq, Anthropic);
+// never to free tiers that may (Gemini free, OpenRouter free). Callers must redact identifiers first.
+const LAB_PROVIDERS: Provider["name"][] = ["groq", "anthropic"];
+export const labAiEnabled = () => providers().some((p) => LAB_PROVIDERS.includes(p.name));
+
+/** Finds lab values in redacted report text. Every result is re-validated against the text by the caller. */
+export async function aiLabExtract(redactedText: string): Promise<{ biomarker: string; value: string; unit: string | null; ref_text: string | null; line: string }[] | null> {
+  const out = await chatJSON<{ markers?: { biomarker: string; value: string; unit: string | null; ref_text: string | null; line: string }[] }>(
+    "You extract laboratory test results from report text. Copy values exactly. Reply with JSON only.",
+    `Report text:\n"""${redactedText}"""\n\nReturn {"markers":[{"biomarker":"test name as printed","value":"result exactly as printed","unit":"unit as printed or null","ref_text":"reference range exactly as printed or null","line":"the full report line copied character for character"}]}.\nRules: only real lab analytes (blood, urine, hormones, vitamins, lipids, etc.); copy, never compute or convert; if a range is not printed use null; skip headers, comments and anything about the person; at most 40 markers.`,
+    30_000, LAB_PROVIDERS,
+  );
+  return Array.isArray(out?.markers) ? out!.markers : null;
+}
+
+/** Safety net (spec §8): drop any AI line that diagnoses, doses or tells someone to take or stop something. */
+export const labSafe = (t: string) => !/\b(you have|you are (deficient|diabetic|anemic|anaemic|pre-?diabetic)|diagnosed? with|take|taking|start|stop|supplement\w*|dose|dosage|prescri\w*|\d+\s?(mg|mcg|µg|iu|units?)\b)/i.test(t);
+
+/** Plain-English, non-diagnostic explanation of confirmed values plus questions for a clinician. */
+export async function aiLabExplain(markers: { biomarker: string; value: string; unit: string | null; ref_text: string | null; flag: string }[]): Promise<{ items: { biomarker: string; meaning: string }[]; questions: string[] } | null> {
+  const lines = markers.slice(0, 40).map((m) => `${m.biomarker}: ${m.value}${m.unit ? ` ${m.unit}` : ""} (lab range: ${m.ref_text ?? "not printed"}; status: ${m.flag})`).join("\n");
+  const out = await chatJSON<{ items?: { biomarker: string; meaning: string }[]; questions?: string[] }>(
+    "You explain lab results to a non-scientist in plain English. You never diagnose, never suggest treatment, supplements or doses, and never invent reference ranges. Reply with JSON only.",
+    `Confirmed results:\n${lines}\n\nReturn {"items":[{"biomarker":"…","meaning":"max 25 words: what this test measures and, only if status is high or low, what being outside the lab's range can generally relate to, ending with 'worth discussing with a clinician'"}],"questions":["3-5 short questions this person could ask a clinician about these specific results"]}.`,
+    30_000, LAB_PROVIDERS,
+  );
+  if (!out) return null;
+  const items = (Array.isArray(out.items) ? out.items : []).filter((i) => i && typeof i.biomarker === "string" && typeof i.meaning === "string" && labSafe(i.meaning)).map((i) => ({ biomarker: i.biomarker.slice(0, 60), meaning: i.meaning.slice(0, 240) }));
+  const questions = (Array.isArray(out.questions) ? out.questions : []).filter((q) => typeof q === "string" && labSafe(q)).map((q) => q.slice(0, 200)).slice(0, 5);
+  return { items, questions };
 }
