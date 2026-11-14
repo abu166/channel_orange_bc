@@ -12,7 +12,7 @@ function providers(): Provider[] {
   const env = process.env;
   const list: Provider[] = [];
   if (env.GROQ_API_KEY) list.push({ name: "groq", kind: "openai", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.AI_MODEL || "auto" });
-  if (env.GEMINI_API_KEY) list.push({ name: "gemini", kind: "openai", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-flash-latest" });
+  if (env.GEMINI_API_KEY) list.push({ name: "gemini", kind: "openai", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "auto" });
   if (env.OPENROUTER_API_KEY) list.push({ name: "openrouter", kind: "openai", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free" });
   if (env.ANTHROPIC_API_KEY) list.push({ name: "anthropic", kind: "anthropic", url: "https://api.anthropic.com/v1/messages", key: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || "claude-haiku-5-5" });
   return list;
@@ -35,17 +35,27 @@ export const llmModel = () => { const p = provider(); return p ? `${p.name}:${p.
 
 /** Groq model availability differs per account and changes over time: ask which models this key can use. */
 const PREFERRED = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"];
-let resolvedModel: string | null = null;
+const resolved = new Map<string, string>();
+let resolvedModel: string | null = null; // primary provider's model, for metadata
 async function resolveModel(p: Provider, force = false): Promise<string> {
   if (p.model !== "auto") return p.model;
-  if (resolvedModel && !force) return resolvedModel;
+  const cached = resolved.get(p.name);
+  if (cached && !force) return cached;
   const res = await fetch(p.url.replace("/chat/completions", "/models"), { headers: { authorization: `Bearer ${p.key}` }, signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`LLM models ${res.status}`);
-  const ids: string[] = ((await res.json())?.data ?? []).map((m: { id: string }) => m.id);
-  const chat = ids.filter((id) => !/whisper|guard|tts|orpheus|playai|prompt-guard|compound/i.test(id));
-  resolvedModel = PREFERRED.find((m) => ids.includes(m)) ?? chat[0] ?? null;
-  if (!resolvedModel) throw new Error("No chat model available for this key");
-  return resolvedModel;
+  const ids: string[] = ((await res.json())?.data ?? []).map((m: { id: string }) => String(m.id).replace(/^models\//, ""));
+  let pick: string | null;
+  if (p.name === "gemini") {
+    // newest general "flash" model (not lite/image/tts/live/embedding)
+    pick = ids.filter((id) => /^gemini-[\d.]+-flash$/.test(id)).sort().reverse()[0] ?? ids.find((id) => id === "gemini-flash-latest") ?? null;
+  } else {
+    const chat = ids.filter((id) => !/whisper|guard|tts|orpheus|playai|prompt-guard|compound/i.test(id));
+    pick = PREFERRED.find((m) => ids.includes(m)) ?? chat[0] ?? null;
+  }
+  if (!pick) throw new Error("No chat model available for this key");
+  resolved.set(p.name, pick);
+  if (p === providers()[0] || p.name === providers()[0]?.name) resolvedModel = pick;
+  return pick;
 }
 
 async function callOnce(p: Provider, system: string, user: string, timeoutMs: number, retried = false): Promise<string> {
@@ -66,7 +76,12 @@ async function callOnce(p: Provider, system: string, user: string, timeoutMs: nu
     const detail = await res.text().catch(() => "");
     const msg = detail.match(/"message"\s*:\s*"([^"]{0,200})/)?.[1] ?? "";
     console.warn(`[llm] ${p.name}:${model} HTTP ${res.status} ${msg}`);
-    if (res.status === 404 && p.model === "auto" && !retried) { resolvedModel = null; await resolveModel(p, true); return callOnce(p, system, user, timeoutMs, true); }
+    if (res.status === 404 && !retried) {
+      // Model retired or not enabled for this key: switch to auto-resolution for this provider and retry once.
+      const auto = { ...p, model: "auto" };
+      await resolveModel(auto, true);
+      return callOnce(auto, system, user, timeoutMs, true);
+    }
     const wait = Number(res.headers.get("retry-after"));
     if (res.status === 429 && !retried && wait > 0 && wait <= 12) { await new Promise((r) => setTimeout(r, wait * 1000)); return callOnce(p, system, user, timeoutMs, true); }
     throw new LlmError(res.status, `LLM ${res.status}: ${msg}`);
@@ -132,14 +147,16 @@ Rules: judge the exact outcome claimed (for "prevents" claims judge incidence/ri
   return { stances, reasons, offTopic, bottomLine: clean(out.bottom_line, 200), explainer: clean(out.explainer, 700) };
 }
 
-/** Health probe for /api/v1/ai/status: one tiny JSON call, reports provider, model and the provider's error text. */
-export async function aiStatus(): Promise<{ provider: string; model: string; ok: boolean; error: string | null }> {
-  const p = provider();
-  if (!p) return { provider: "none", model: "none", ok: false, error: "No AI key configured" };
-  try {
-    const text = await callOnce(p, "Reply with JSON only.", 'Return {"ok":true} as JSON.', 15_000);
-    return { provider: p.name, model: resolvedModel ?? p.model, ok: /"ok"\s*:\s*true/.test(text), error: null };
-  } catch (e) {
-    return { provider: p.name, model: resolvedModel ?? p.model, ok: false, error: e instanceof Error ? e.message : "unknown error" };
-  }
+/** Health probe for /api/v1/ai/status: one tiny JSON call per configured provider (primary first). Never returns secrets. */
+export async function aiStatus(): Promise<{ provider: string; model: string; ok: boolean; error: string | null }[]> {
+  const list = providers();
+  if (!list.length) return [{ provider: "none", model: "none", ok: false, error: "No AI key configured" }];
+  return Promise.all(list.map(async (p) => {
+    try {
+      const text = await callOnce(p, "Reply with JSON only.", 'Return {"ok":true} as JSON.', 15_000);
+      return { provider: p.name, model: resolved.get(p.name) ?? p.model, ok: /"ok"\s*:\s*true/.test(text), error: null };
+    } catch (e) {
+      return { provider: p.name, model: resolved.get(p.name) ?? p.model, ok: false, error: e instanceof Error ? e.message : "unknown error" };
+    }
+  }));
 }
