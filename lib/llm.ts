@@ -19,23 +19,34 @@ function provider(): Provider | null {
 export const llmEnabled = () => provider() !== null;
 export const llmModel = () => { const p = provider(); return p ? `${p.name}:${p.model}` : "none"; };
 
+async function callOnce(p: Provider, system: string, user: string, timeoutMs: number): Promise<string> {
+  const res = p.kind === "anthropic"
+    ? await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", "x-api-key": p.key, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: p.model, max_tokens: 1500, temperature: 0, system, messages: [{ role: "user", content: user }] }) })
+    : await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", authorization: `Bearer ${p.key}` },
+        body: JSON.stringify({
+          model: p.model, temperature: 0, max_tokens: 1500,
+          // Groq and OpenRouter support strict JSON mode; it guarantees a parseable object.
+          ...(p.name === "groq" || p.name === "openrouter" ? { response_format: { type: "json_object" } } : {}),
+          messages: [{ role: "system", content: system }, { role: "user", content: user }],
+        }) });
+  if (!res.ok) throw new Error(`LLM ${res.status}`);
+  const data = await res.json();
+  return p.kind === "anthropic" ? data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "" : data?.choices?.[0]?.message?.content ?? "";
+}
+
+/** JSON-only call with one retry on network/parse failure. Returns null instead of guessing. */
 async function chatJSON<T>(system: string, user: string, timeoutMs = 20_000): Promise<T | null> {
   const p = provider();
   if (!p) return null;
-  try {
-    const res = p.kind === "anthropic"
-      ? await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", "x-api-key": p.key, "anthropic-version": "2023-06-01" },
-          body: JSON.stringify({ model: p.model, max_tokens: 1500, system, messages: [{ role: "user", content: user }] }) })
-      : await fetch(p.url, { method: "POST", signal: AbortSignal.timeout(timeoutMs), headers: { "content-type": "application/json", authorization: `Bearer ${p.key}` },
-          body: JSON.stringify({ model: p.model, temperature: 0.1, max_tokens: 1500, messages: [{ role: "system", content: system }, { role: "user", content: user }] }) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text: string = p.kind === "anthropic" ? data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "" : data?.choices?.[0]?.message?.content ?? "";
-    const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-    return json ? (JSON.parse(json) as T) : null;
-  } catch {
-    return null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await callOnce(p, system, user, timeoutMs);
+      const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+      if (json) return JSON.parse(json) as T;
+    } catch { /* retry once, then give up */ }
   }
+  return null;
 }
 
 export interface AiClaim { verbatim: string; normalized: string; intervention: string; outcome: string; claim_type?: string }
@@ -56,7 +67,9 @@ export async function refineStances(claim: Claim, evidence: EvidenceSource[]): P
   const sources = evidence.slice(0, 10).map((e) => `PMID ${e.pmid} [${e.study_design}, ${e.year}] ${e.title}\nConclusion: ${e.conclusion ?? "(no abstract)"}`).join("\n\n");
   const out = await chatJSON<{ stances?: { pmid: string; stance: string; why?: string }[]; bottom_line?: string; explainer?: string }>(
     "You are a careful evidence analyst explaining research to a non-scientist. Reply with JSON only. Never give medical advice or doses.",
-    `Claim: "${claim.normalized_text}"\n\nSources:\n${sources}\n\nFor each PMID: "supports" if its conclusion backs the claim as worded, "contradicts" if it found no effect or the opposite, "neutral" if off-topic, mixed or no abstract. Add "why": max 14 plain words on what that study found (e.g. "Trial in 100 women: less wrinkling after 12 weeks").\nThen write "bottom_line": max 18 words a 30-year-old would get instantly (e.g. "Some small studies show a modest effect, but not a cure."), and "explainer": 2-3 short sentences on what the studies actually found, mentioning study types, using only these sources.\nReturn {"stances":[{"pmid":"…","stance":"…","why":"…"}],"bottom_line":"…","explainer":"…"}`,
+    `Claim: "${claim.normalized_text}"\n\nSources:\n${sources}\n\nClaim type: ${claim.claim_type}${claim.comparator ? `; it compares against ${claim.comparator}` : ""}.
+For each PMID: "supports" if its conclusion backs the claim AS WORDED, "contradicts" if it found no effect or the opposite, "neutral" if off-topic, mixed, a different outcome, or no abstract.
+Rules: judge the exact outcome claimed (for "prevents" claims judge incidence/risk, not duration or severity); for harm claims ("X causes Y") lower risk or no association CONTRADICTS and higher risk SUPPORTS; animal, cell and narrative-review findings are "neutral" unless the claim is about them; a comparison claim needs a head-to-head study, otherwise "neutral". Add "why": max 14 plain words on what that study found (e.g. "Trial in 100 women: less wrinkling after 12 weeks").\nThen write "bottom_line": max 18 words a 30-year-old would get instantly (e.g. "Some small studies show a modest effect, but not a cure."), and "explainer": 2-3 short sentences on what the studies actually found, mentioning study types, using only these sources.\nReturn {"stances":[{"pmid":"…","stance":"…","why":"…"}],"bottom_line":"…","explainer":"…"}`,
   );
   if (!out) return null;
   const allowed = new Set(evidence.map((e) => e.pmid));
