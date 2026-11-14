@@ -186,7 +186,7 @@ export async function aiLabExplain(markers: { biomarker: string; value: string; 
   const lines = markers.slice(0, 40).map((m) => `${m.biomarker}: ${m.value}${m.unit ? ` ${m.unit}` : ""} (lab range: ${m.ref_text ?? "not printed"}; status: ${m.flag})`).join("\n");
   const out = await chatJSON<{ items?: { biomarker: string; meaning: string }[]; questions?: string[] }>(
     "You explain lab results to a non-scientist in plain English. You never diagnose, never suggest treatment, supplements or doses, and never invent reference ranges. Reply with JSON only.",
-    `Confirmed results:\n${lines}\n\nReturn {"items":[{"biomarker":"…","meaning":"max 25 words: what this test measures and, only if status is high or low, what being outside the lab's range can generally relate to, ending with 'worth discussing with a clinician'"}],"questions":["3-5 short questions this person could ask a clinician about these specific results"]}.`,
+    `Confirmed results:\n${lines}\n\nReturn {"items":[{"biomarker":"…","meaning":"max 18 words: what this test measures and, only if status is high or low, what being outside the lab's range can generally relate to, ending with 'worth discussing with a clinician'"}],"questions":["3-5 short questions this person could ask a clinician about these specific results"]}.`,
     30_000, LAB_PROVIDERS,
   );
   if (!out) return null;

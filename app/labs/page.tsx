@@ -24,7 +24,8 @@ export default function LabsPage() {
   useEffect(() => { const params = new URLSearchParams(window.location.search); if (params.get("service") === "review") setChoice("written"); else if (params.get("plan") === "lab") setChoice("lab"); }, []);
   const [step, setStep] = useState(0);
   const [rows, setRows] = useState<LabValue[]>([]);
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [useAi, setUseAi] = useState(true);
+  const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [slot, setSlot] = useState<string | null>(null);
@@ -49,13 +50,15 @@ export default function LabsPage() {
   const service = choice === "written" ? SERVICES.lab_review : SERVICES.lab_consult;
   
   const outside = rows.filter(r => r.flag === "low" || r.flag === "high").length;
-  const pending = rows.filter(r => !checked[r.id]).length;
+  const isAi = (r: LabValue) => r.id.startsWith("ai-");
+  const needsLook = (r: LabValue) => r.flag === "unknown" || r.issues.some(i => !i.startsWith("Found by AI"));
+  const aiFound = rows.filter(isAi).length;
   function load(text: string) {
     const extracted = extractLabValues(text);
-    setSource(text); setExplained(null); setAiNote("");
-    setRows(extracted); setChecked({});
-    if (!extracted.length) { setError("No supported markers found. Try a clearer photo, another report, or the sample report."); return; }
+    setSource(text); setExplained(null); setAiNote(""); setEditing(null); setRows(extracted);
+    if (!extracted.length && !useAi) { setError("No supported markers found. Try a clearer photo, another report, or the sample report."); return; }
     setError(""); setStep(1);
+    if (useAi) void runAi(text, extracted);
   }
   async function upload(file: File) {
     if (busy) return;
@@ -78,45 +81,44 @@ export default function LabsPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Could not read report. Try again with a clearer file."); }
     finally { setBusy(""); }
   }
-  // Optional AI help. The server strips names, birth dates and IDs, and checks every AI value against the report text.
-  async function findMore() {
-    if (aiBusy || !source) return;
-    setAiBusy("extract"); setAiNote("");
+  // AI (on by default, switchable before upload): 1) find values the rule reader missed, 2) explain each in plain English.
+  // The server strips names, birth dates and IDs, and keeps an AI value only if it is printed in the report.
+  async function runAi(text: string, base: LabValue[]) {
+    const post = async (body: object) => {
+      const response = await fetch("/api/v1/labs/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || "AI help is unavailable right now.");
+      return result;
+    };
+    let all = base;
     try {
-      const response = await fetch("/api/v1/labs/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "extract", text: source }) });
-      const result = await response.json();
-      if (!response.ok) { setAiNote(result.message || "AI help is unavailable right now."); return; }
-      const have = new Set(rows.flatMap(r => [r.biomarker.toLowerCase(), r.raw_line.trim().toLowerCase()]));
-      const added: LabValue[] = (result.values as LabValue[]).filter(v => !have.has(v.biomarker.toLowerCase()) && !have.has(v.raw_line.trim().toLowerCase()));
+      setAiBusy("extract");
+      const found = await post({ mode: "extract", text });
+      const have = new Set(base.flatMap(r => [r.biomarker.toLowerCase(), r.raw_line.trim().toLowerCase()]));
+      const added = (found.values as LabValue[]).filter(v => !have.has(v.biomarker.toLowerCase()) && !have.has(v.raw_line.trim().toLowerCase()));
+      all = [...base, ...added];
       setRows(old => [...old, ...added]);
-      setAiNote(added.length ? `AI found ${added.length} more ${added.length === 1 ? "value" : "values"}, marked “Found by AI”. Check each against your report.` : "AI found nothing new. Every value it could read is already listed.");
-      if (added.length) { setError(""); setStep(1); }
-    } catch { setAiNote("AI help is unavailable right now."); }
-    finally { setAiBusy(""); }
+      if (!all.length) { setStep(0); setError("No lab values found. Try a clearer photo, another report, or the test PDF."); return; }
+      setAiBusy("explain");
+      const ordered = [...all].sort((a, b) => Number(b.flag === "low" || b.flag === "high") - Number(a.flag === "low" || a.flag === "high"));
+      setExplained(await post({ mode: "explain", markers: ordered.map(({ biomarker, value, unit, ref_text, flag }) => ({ biomarker, value, unit, ref_text, flag })) }));
+    } catch (e) {
+      if (!all.length) { setStep(0); setError("No supported markers found. Try a clearer photo, another report, or the test PDF."); }
+      else setAiNote(`${e instanceof Error ? e.message : "AI help is unavailable right now."} Your values are still here.`);
+    } finally { setAiBusy(""); }
   }
-  async function explain() {
-    if (aiBusy || !rows.length) return;
-    setAiBusy("explain"); setAiNote("");
-    try {
-      const response = await fetch("/api/v1/labs/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "explain", markers: rows.map(({ biomarker, value, unit, ref_text, flag }) => ({ biomarker, value, unit, ref_text, flag })) }) });
-      const result = await response.json();
-      if (!response.ok) { setAiNote(result.message || "AI help is unavailable right now."); return; }
-      setExplained(result);
-    } catch { setAiNote("AI help is unavailable right now."); }
-    finally { setAiBusy(""); }
-  }
-  const meaning = (name: string) => explained?.items.find(i => i.biomarker.toLowerCase() === name.toLowerCase())?.meaning;
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const meaning = (name: string) => explained?.items.find(i => norm(i.biomarker) === norm(name))?.meaning;
   function edit(id: string, field: "value" | "unit" | "ref_text" | "biomarker", text: string) {
     setRows(old => old.map(r => {
       if (r.id !== id) return r;
       const next = { ...r, [field]: text };
       return { ...next, ...assessLabValue(next.value, next.unit, next.ref_text) };
     }));
-    setChecked(old => ({ ...old, [id]: false }));
   }
   function confirm(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if ((choice !== "written" && (!slot || new Date(slot).getTime() <= Date.now())) || pending) { setError("Check your values and choose an upcoming time for video."); return; }
+    if ((choice !== "written" && (!slot || new Date(slot).getTime() <= Date.now())) ) { setError("Choose an upcoming time for your video consult."); return; }
     if (!contact.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email) || !/^\+?[\d\s().-]+$/.test(contact.phone) || contact.phone.replace(/\D/g, "").length < 10 || contact.phone.replace(/\D/g, "").length > 15) { setError("Enter your name, valid email, and a phone number with 10–15 digits."); return; }
     const saved = saveBooking({ kind: service.id, slot_iso: choice === "written" ? new Date().toISOString() : slot!, duration_min: service.minutes, price_usd: choice === "lab" ? labPlan.monthly : service.price, plan_id: choice === "lab" ? "lab" : null, contact, address: null, details: { markers: JSON.stringify(rows), questions } });
     if (!listBookings().some(item => item.id === saved.id)) { setError("Could not save your request. Enable local storage and try again."); return; }
@@ -135,44 +137,42 @@ export default function LabsPage() {
         </label>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2"><button className="btn-ghost flex min-h-11" disabled={!!busy} onClick={() => load(SAMPLE_REPORT)}>Try sample</button><a href="/samples/synthetic-lab-report.pdf" download className="inline-flex min-h-11 items-center text-base underline">Download a test PDF</a></div></div>
         
-        <p className="max-w-[65ch] text-base text-muted">Synthetic sample · photos read on-device · PDFs processed without storage.</p>
+        <label htmlFor="lab-ai" className="flex max-w-[65ch] cursor-pointer items-start gap-3 text-base"><input id="lab-ai" type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-burgundy" checked={useAi} onChange={e => setUseAi(e.target.checked)} /><span><span className="font-medium">Explain my results with AI</span><span className="mt-1 block text-muted">Finds values the reader missed and explains each one in plain English. Names, birth dates and IDs are removed first. Nothing is stored.</span></span></label>
+        <p className="max-w-[65ch] text-base text-muted">Photos are read on-device · PDFs are processed without storage.</p>
       </div>}
-      {step === 1 && <div className="space-y-5">
-        <h2 ref={heading} tabIndex={-1} className="display text-3xl">Check every detail.</h2><p className="max-w-[65ch] text-base text-muted">Compare every field with your report, correct errors, then confirm each marker.</p>
-        <div className="flex flex-wrap gap-x-8 gap-y-2 border-y border-line">{[{ count: rows.filter(r => r.flag === "in_range").length, label: "In the lab’s range", color: "text-support" }, { count: outside, label: "Outside the lab’s range", color: "text-danger" }, { count: rows.filter(r => r.flag === "unknown").length, label: "Check this value", color: "text-fg" }].map(item => <div key={item.label} className="flex items-baseline gap-4 py-3"><p className={`font-sans text-xl tabular-nums ${item.color}`}>{item.count}</p><p className="max-w-[65ch] mt-2 text-base">{item.label}</p></div>)}</div>
-        <p className="max-w-[65ch] text-base text-muted">{pending} unconfirmed · printed ranges do not establish health.</p>
-        {!!outside && <p className="max-w-[65ch] rounded-md border border-partial/25 p-4 text-base">Values may need prompt attention. Unwell? Contact your doctor today; emergencies: call 911.</p>}
-        <button className="btn-ghost min-h-11" onClick={() => setChecked(old => ({ ...old, ...Object.fromEntries(rows.filter(r => !r.issues.length).map(r => [r.id, true])) }))}>Confirm checked values</button>
-        <p className="max-w-[65ch] text-base text-muted">Review flagged rows individually; extraction may omit markers.</p>
-        <div className="rounded-md border border-line bg-surface p-4">
-          <div className="flex flex-wrap gap-3">
-            <button className="btn-ghost inline-flex items-center gap-2" disabled={!!aiBusy || !source} onClick={() => void findMore()}>{aiBusy === "extract" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}Find missed values</button>
-            <button className="btn-ghost inline-flex items-center gap-2" disabled={!!aiBusy || !rows.length} onClick={() => void explain()}>{aiBusy === "explain" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}Explain my results</button>
-          </div>
-          <p className="mt-3 max-w-[65ch] text-base text-muted">Optional AI. Names, birth dates and IDs are removed before sending. Nothing is stored.</p>
-          {aiNote && <p role="status" className="mt-3 max-w-[65ch] text-base">{aiNote}</p>}
-        </div>
-        <table className="block w-full table-fixed border-collapse text-left text-base tabular-nums md:table">
-          <caption className="mb-4 text-left text-muted">Your results · editable</caption>
-          <thead className="sr-only md:not-sr-only md:table-header-group"><tr>{["Marker", "Your value", "Unit", "Lab range", "Status"].map(label => <th key={label} scope="col" className="border-b border-line px-2 py-3 font-medium">{label}</th>)}</tr></thead>
-          <tbody className="block divide-y divide-line md:table-row-group">{rows.map(r => <tr key={r.id} className={`grid min-w-0 grid-cols-2 gap-3 py-5 md:table-row ${r.issues.length || r.confidence < 0.8 ? "bg-warning/5" : ""}`}>
-            <th scope="row" className="col-span-2 min-w-0 px-2 py-3 align-top font-normal md:w-[30%]">
-              <label htmlFor={`lab-${r.id}-biomarker`} className="sr-only">Marker</label><input id={`lab-${r.id}-biomarker`} className="field font-medium" value={r.biomarker} onChange={e => edit(r.id, "biomarker", e.target.value)} />
-              <p className="mt-2 text-base text-muted">{meaning(r.biomarker) ?? about[r.biomarker] ?? "Check marker name; ask your clinician."}</p>{meaning(r.biomarker) && <p className="mt-1 text-sm text-muted">AI explanation · not a diagnosis</p>}
-              <details className="mt-2 text-base text-muted"><summary className="min-h-11 cursor-pointer py-2">Original report line</summary><p className="break-words [overflow-wrap:anywhere]">{r.raw_line}</p></details>
-            </th>
-            {([["value", "Your value"], ["unit", "Unit"], ["ref_text", "Lab range"]] as const).map(([field, label]) => <td key={field} className="min-w-0 px-2 py-3 align-top md:w-[15%]"><label htmlFor={`lab-${r.id}-${field}`} className="mb-2 block text-muted md:sr-only">{label}</label><input id={`lab-${r.id}-${field}`} className="field min-w-0 !px-2 tabular-nums" value={r[field] ?? ""} onChange={e => edit(r.id, field, e.target.value)} />
-              {field === "ref_text" && r.ref_low !== null && r.ref_high !== null && r.ref_high > r.ref_low && /^[-+]?\d+(\.\d+)?$/.test(r.value) && <div className="mt-4" role="img" aria-label={`${r.biomarker}: ${r.value}; printed range ${r.ref_text}. Green band: printed range; ink marker: your value.`}><div className="relative h-2 border border-line bg-cream"><span className="absolute left-[20%] right-[20%] h-full bg-success/30" /><span className="absolute -top-1 h-4 w-0.5 bg-ink" style={{ left: `${Math.max(0, Math.min(99, 20 + (Number(r.value) - r.ref_low) / (r.ref_high - r.ref_low) * 60))}%` }} /></div><p className="mt-2 text-base text-muted">Band: printed range<br />Line: your value</p></div>}
-            </td>)}
-            <td className="col-span-2 min-w-0 px-2 py-3 align-top md:w-1/4"><p className={`text-base font-medium ${r.flag === "in_range" ? "text-success" : r.flag === "unknown" ? "text-warning" : "text-danger"}`}>{r.flag === "in_range" ? "In range" : r.flag === "unknown" ? "Check value" : "Outside lab range"}</p>
-              {(r.flag === "low" || r.flag === "high") && <p className="mt-2 text-base text-muted">Discuss in your consult.</p>}
-              {!!r.issues.length && <p className="mt-3 text-base text-warning">Needs review: {r.issues.join(" · ")}</p>}
-              <label htmlFor={`lab-check-${r.id}`} className="mt-3 flex min-h-11 items-start gap-2 py-2 text-base"><input id={`lab-check-${r.id}`} className="mt-1 h-5 w-5 shrink-0 accent-burgundy" type="checkbox" aria-label="Looks right. I checked these fields" checked={!!checked[r.id]} onChange={e => setChecked(old => ({ ...old, [r.id]: e.target.checked }))} />Looks right</label>
-            </td>
-          </tr>)}</tbody>
-        </table>
+      {step === 1 && <div className="space-y-6">
+        <div><h2 ref={heading} tabIndex={-1} className="display text-3xl">Your results.</h2><p className="mt-3 max-w-[65ch] text-base text-muted">Compare with your report. Tap Edit on anything that is wrong.</p></div>
+        <div className="flex flex-wrap gap-x-10 gap-y-2 border-y border-line">{[{ count: outside, label: "Outside the lab’s range", color: "text-danger" }, { count: rows.filter(needsLook).length, label: "Need a look", color: "text-warning" }, { count: rows.filter(r => r.flag === "in_range" && !needsLook(r)).length, label: "In the lab’s range", color: "text-success" }].filter(item => item.count || item.color !== "text-warning").map(item => <div key={item.label} className="flex items-baseline gap-3 py-3"><p className={`text-2xl font-medium tabular-nums ${item.color}`}>{item.count}</p><p className="text-base">{item.label}</p></div>)}</div>
+        {aiBusy ? <p role="status" className="flex items-center gap-2 text-base"><Loader2 size={18} className="animate-spin text-burgundy" aria-hidden="true" />{aiBusy === "extract" ? "AI is checking the report for values the reader missed…" : "AI is writing a plain-English line for each result…"}</p>
+          : explained ? <p className="flex items-start gap-2 text-base text-muted"><Sparkles size={18} className="mt-0.5 shrink-0 text-burgundy" aria-hidden="true" />{aiFound ? `AI found ${aiFound} ${aiFound === 1 ? "value" : "values"} the reader missed and explained every result.` : "AI explained every result in plain English."} It does not diagnose.</p>
+          : aiNote ? <p role="status" className="text-base text-muted">{aiNote}</p> : null}
+        {!!outside && <p className="max-w-[65ch] rounded-md border border-partial/25 p-4 text-base">Some values may need prompt attention. If you feel unwell, contact your doctor today or call 911 in an emergency.</p>}
+        {([["Outside the lab’s range", rows.filter(r => r.flag === "low" || r.flag === "high")], ["Need a look", rows.filter(r => r.flag !== "low" && r.flag !== "high" && needsLook(r))], ["In the lab’s range", rows.filter(r => r.flag === "in_range" && !needsLook(r))]] as const).filter(([, list]) => list.length).map(([title, list]) => <section key={title} aria-label={title}>
+          <h3 className="text-lg font-medium">{title} <span className="font-normal text-muted tabular-nums">{list.length}</span></h3>
+          <ul className="mt-2 divide-y divide-line border-y border-line">{list.map(r => {
+            const tone = r.flag === "in_range" ? "text-success" : r.flag === "unknown" ? "text-warning" : "text-danger";
+            const status = r.flag === "high" ? "Above lab range" : r.flag === "low" ? "Below lab range" : r.flag === "in_range" ? "In range" : "Check value";
+            const bar = r.ref_low !== null && r.ref_high !== null && r.ref_high > r.ref_low && /^[-+]?\d+(\.\d+)?$/.test(r.value);
+            return <li key={r.id} className="py-4">
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+                <p className="text-lg font-medium">{r.biomarker}{isAi(r) && <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-line px-2 align-middle text-base font-normal text-muted"><Sparkles size={14} aria-hidden="true" />Found by AI</span>}</p>
+                <div className="flex items-center gap-4"><p className="tabular-nums"><span className={`text-lg font-medium ${tone}`}>{r.value}</span> <span className="text-base text-muted">{r.unit}</span></p><button className="text-base underline" aria-expanded={editing === r.id} onClick={() => setEditing(editing === r.id ? null : r.id)}>{editing === r.id ? "Done" : "Edit"}</button></div>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-base">
+                <p className="max-w-[62ch] text-muted">{meaning(r.biomarker) ?? about[r.biomarker] ?? "Ask your clinician what this test measures."}</p>
+                <div className="flex items-center gap-3 tabular-nums">{bar && <span role="img" aria-label={`${r.value} against the printed range ${r.ref_text}`} className="relative h-2 w-24 rounded-full bg-subtle"><span className="absolute inset-y-0 left-[20%] right-[20%] rounded-full bg-success/30" /><span className="absolute -top-1 h-4 w-0.5 bg-ink" style={{ left: `${Math.max(0, Math.min(99, 20 + (Number(r.value) - r.ref_low!) / (r.ref_high! - r.ref_low!) * 60))}%` }} /></span>}<span className="text-muted">Lab range {r.ref_text ?? "not printed"}</span><span className={tone}>{status}</span></div>
+              </div>
+              {r.issues.filter(i => !i.startsWith("Found by AI")).length > 0 && <p className="mt-2 text-base text-warning">{r.issues.filter(i => !i.startsWith("Found by AI")).join(" · ")}</p>}
+              {editing === r.id && <div className="mt-4 grid gap-3 rounded-md border border-line bg-surface p-4 sm:grid-cols-4">
+                {([["biomarker", "Test"], ["value", "Value"], ["unit", "Unit"], ["ref_text", "Lab range"]] as const).map(([field, label]) => <label key={field} htmlFor={`lab-${r.id}-${field}`} className="text-base text-muted">{label}<input id={`lab-${r.id}-${field}`} className="field mt-1 tabular-nums text-fg" value={r[field] ?? ""} onChange={e => edit(r.id, field, e.target.value)} /></label>)}
+                <p className="text-base text-muted sm:col-span-4 break-words [overflow-wrap:anywhere]">On your report: “{r.raw_line}”</p>
+              </div>}
+            </li>;
+          })}</ul>
+        </section>)}
         {!!explained?.questions.length && <div className="rounded-md border border-line bg-surface p-4"><h3 className="text-lg font-medium">Questions to ask your clinician</h3><ul className="mt-3 list-disc space-y-2 pl-5 text-base">{explained.questions.map(q => <li key={q}>{q}</li>)}</ul><button className="btn-ghost mt-4" disabled={explained.questions.every(q => questions.includes(q))} onClick={() => setQuestions(old => [old.trim(), ...explained.questions.filter(q => !old.includes(q))].filter(Boolean).join("\n"))}>{explained.questions.every(q => questions.includes(q)) ? "Added to your review" : "Add to my review"}</button><p className="mt-3 text-base text-muted">AI suggestion. Your clinician decides what matters.</p></div>}
-        <div className="flex flex-wrap gap-3"><button className="btn-ghost" onClick={() => setStep(0)}>Back to upload</button><button className="btn-primary" disabled={pending > 0 || !rows.length} onClick={() => setStep(2)}>Choose your review</button></div>
+        <p className="max-w-[65ch] text-base text-muted">Ranges are the lab’s own and don’t establish health. A reader can miss lines, so glance over your report too.</p>
+        <div className="flex flex-wrap gap-3"><button className="btn-ghost" onClick={() => setStep(0)}>Back to upload</button><button className="btn-primary" disabled={!rows.length} onClick={() => setStep(2)}>These match my report, continue</button></div>
       </div>}
       {step === 2 && <form onSubmit={confirm} className="space-y-6">
         <div><h2 ref={heading} tabIndex={-1} className="display text-3xl">Choose your review.</h2><p className="max-w-[65ch] mt-3 text-base text-muted">A licensed partner physician or nurse practitioner answers your questions.</p></div>
@@ -187,8 +187,8 @@ export default function LabsPage() {
         <p className="max-w-[65ch] text-base text-muted">Contact details only when you book.</p>
         <div className="flex flex-wrap gap-3"><button type="button" className="btn-ghost" onClick={() => { setError(""); setStep(1); }}>Back to values</button><button disabled={choice !== "written" && !slot} type="submit" className="btn-primary">Save request</button></div>
       </form>}
-      {step === 3 && booking && <div className="space-y-5"><Check size={20} className="text-fg" aria-hidden="true" /><h2 ref={heading} tabIndex={-1} className="display text-4xl">Your review request.</h2><p>{booking.plan_id === "lab" ? labPlan.name : SERVICES[booking.kind].name} · ${booking.price_usd}{booking.plan_id ? "/month" : ""} at launch</p>{booking.plan_id === "lab" && <p className="max-w-[65ch] text-base text-muted">{labPlan.commitment}. First payment at launch.</p>}<p className="max-w-[65ch] tabular-nums text-base">{booking.kind === "lab_review" ? "Written answer within 24 h at launch." : new Date(booking.slot_iso).toLocaleString([], { dateStyle: "full", timeStyle: "short" })}</p><p className="max-w-[65ch] text-base text-muted">For {booking.contact.name} · {booking.contact.email}<br />{rows.length} confirmed markers · appointment unconfirmed.</p>{booking.kind !== "lab_review" && <button className="btn-primary" onClick={() => downloadICS(booking)}>Add to calendar</button>}<Link href="/care" className="inline-block text-fg underline">Explore Whole Health</Link></div>}
-      {error && <div role="alert" className="mt-5 rounded-md border border-contradict/40 p-4"><p className="max-w-[65ch] text-base text-contradict">{error}</p>{step === 0 && lastFile.current && <button className="btn-ghost mt-3" disabled={!!busy} onClick={() => lastFile.current && void upload(lastFile.current)}>Retry file</button>}{step === 0 && source && !rows.length && <button className="btn-ghost mt-3 ml-3 inline-flex items-center gap-2" disabled={!!aiBusy} onClick={() => void findMore()}>{aiBusy ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}Read it with AI</button>}{step === 0 && aiNote && <p role="status" className="mt-3 text-base">{aiNote}</p>}</div>}
+      {step === 3 && booking && <div className="space-y-5"><Check size={20} className="text-fg" aria-hidden="true" /><h2 ref={heading} tabIndex={-1} className="display text-4xl">Your review request.</h2><p>{booking.plan_id === "lab" ? labPlan.name : SERVICES[booking.kind].name} · ${booking.price_usd}{booking.plan_id ? "/month" : ""} at launch</p>{booking.plan_id === "lab" && <p className="max-w-[65ch] text-base text-muted">{labPlan.commitment}. First payment at launch.</p>}<p className="max-w-[65ch] tabular-nums text-base">{booking.kind === "lab_review" ? "Written answer within 24 h at launch." : new Date(booking.slot_iso).toLocaleString([], { dateStyle: "full", timeStyle: "short" })}</p><p className="max-w-[65ch] text-base text-muted">For {booking.contact.name} · {booking.contact.email}<br />{rows.length} markers · appointment unconfirmed.</p>{booking.kind !== "lab_review" && <button className="btn-primary" onClick={() => downloadICS(booking)}>Add to calendar</button>}<Link href="/care" className="inline-block text-fg underline">Explore Whole Health</Link></div>}
+      {error && <div role="alert" className="mt-5 rounded-md border border-contradict/40 p-4"><p className="max-w-[65ch] text-base text-contradict">{error}</p>{step === 0 && lastFile.current && <button className="btn-ghost mt-3" disabled={!!busy} onClick={() => lastFile.current && void upload(lastFile.current)}>Retry file</button>}</div>}
     </motion.div></AnimatePresence>
     <p className="mt-5 text-base text-muted">{PILOT}</p>
     </div>
