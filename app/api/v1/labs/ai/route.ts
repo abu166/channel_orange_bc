@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (body?.mode === "extract" && typeof body.text === "string" && body.text.trim().length > 20) {
     const redacted = redactPHI(body.text);
     const known = extractLabValues(redacted);
-    const candidates = await aiLabExtract(redacted);
+    const candidates = await aiLabExtract(redacted, known.map((k) => k.raw_line.trim().slice(0, 80)));
     if (!candidates) return Response.json({ error: "ai_unavailable", message: "The AI reader is busy. Try again in a minute." }, { status: 503 });
     return Response.json({ values: validateAiLabValues(redacted, candidates, known), proposed: candidates.length });
   }

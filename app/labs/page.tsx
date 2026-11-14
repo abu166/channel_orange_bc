@@ -86,8 +86,8 @@ export default function LabsPage() {
       const response = await fetch("/api/v1/labs/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "extract", text: source }) });
       const result = await response.json();
       if (!response.ok) { setAiNote(result.message || "AI help is unavailable right now."); return; }
-      const have = new Set(rows.map(r => r.biomarker.toLowerCase()));
-      const added: LabValue[] = (result.values as LabValue[]).filter(v => !have.has(v.biomarker.toLowerCase()));
+      const have = new Set(rows.flatMap(r => [r.biomarker.toLowerCase(), r.raw_line.trim().toLowerCase()]));
+      const added: LabValue[] = (result.values as LabValue[]).filter(v => !have.has(v.biomarker.toLowerCase()) && !have.has(v.raw_line.trim().toLowerCase()));
       setRows(old => [...old, ...added]);
       setAiNote(added.length ? `AI found ${added.length} more ${added.length === 1 ? "value" : "values"}, marked “Found by AI”. Check each against your report.` : "AI found nothing new. Every value it could read is already listed.");
       if (added.length) { setError(""); setStep(1); }
@@ -133,7 +133,7 @@ export default function LabsPage() {
           <input id="lab-upload" aria-label="Upload lab report PDF or photo" type="file" accept="application/pdf,image/*" disabled={!!busy} className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
           {busy ? <Loader2 size={20} className="animate-spin text-fg" /> : null}<span role="status">{busy || "Upload PDF or photo"}</span><span className="text-base text-muted">8 MB maximum · clear, single-column reports</span>
         </label>
-        <button className="btn-ghost mx-auto mt-3 flex min-h-11" disabled={!!busy} onClick={() => load(SAMPLE_REPORT)}>Try sample</button></div>
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2"><button className="btn-ghost flex min-h-11" disabled={!!busy} onClick={() => load(SAMPLE_REPORT)}>Try sample</button><a href="/samples/synthetic-lab-report.pdf" download className="inline-flex min-h-11 items-center text-base underline">Download a test PDF</a></div></div>
         
         <p className="max-w-[65ch] text-base text-muted">Synthetic sample · photos read on-device · PDFs processed without storage.</p>
       </div>}

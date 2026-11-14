@@ -40,14 +40,17 @@ export function assessLabValue(value: string, unit: string | null, ref_text: str
   }
   return { ref_low: range.low, ref_high: range.high, flag, issues, confidence: Math.max(0.2, 0.98 - issues.length * 0.22) };
 }
+const QUALIFIERS = /^(?:(?:chol|cholesterol|calc|calculated|direct|measured|\(nih\)|\(calc\)|serum|plasma|fasting|cardiac|\(hs-?crp\)|hs|high sensitivity|quant|quantitative|level),?\s+)+(?=[<>≤≥]?=?\s*[+-]?\d)/i;
 export function extractLabValues(text: string): LabValue[] {
   const aliases = BIOMARKERS.flatMap(([id, name, ...rest]) => [name, ...rest].map(alias => ({ id, name, alias }))).sort((a, b) => b.alias.length - a.alias.length);
   const out: LabValue[] = [];
   for (const raw_line of text.split(/\r?\n/)) {
     const line = raw_line.trim();
-    const match = aliases.find(({ alias }) => line.toLowerCase().startsWith(alias.toLowerCase()) && /^[\s:|]/.test(line.slice(alias.length, alias.length + 1)));
+    const match = aliases.find(({ alias }) => line.toLowerCase().startsWith(alias.toLowerCase()) && /^[\s:|,]/.test(line.slice(alias.length, alias.length + 1)));
     if (!match) continue;
-    const tail = line.slice(match.alias.length).replace(/^[\s:|]+/, "");
+    // Skip printed qualifiers ("LDL Chol Calc (NIH) 135", "C-Reactive Protein, Cardiac (hs-CRP) 3.4"), never other words,
+    // so "Iron Binding Capacity 320" is not read as Iron.
+    const tail = line.slice(match.alias.length).replace(/^[\s:|,]+/, "").replace(QUALIFIERS, "");
     const first = tail.match(/^(<?=?|>?=?)\s*[+-]?\d+(?:[.,]\d+)?|^\S+/)?.[0];
     if (!first) continue;
     const value = first;
@@ -77,45 +80,54 @@ Potassium 4.2 3.5-5.1`;
 
 /* ------------------------------ AI assistance (opt-in) ------------------------------ */
 
+const IDENTIFYING = /\b(patient|name|dob|d\.o\.b|date of birth|birth ?date|age\/sex|sex(?!\s*hormone)|gender|mrn|medical record|record no|account|acct|accession|specimen id|address|street|city|zip|phone|tel|fax|e-?mail|ssn|social security|insurance|member id|policy|physician|doctor|ordering|provider|npi|client)\b/i;
+
 /** Removes lines and tokens that identify the patient before any text leaves for an AI provider (spec §8.2). */
 export function redactPHI(text: string): string {
-  const identifying = /\b(patient|name|dob|d\.o\.b|date of birth|birth ?date|age\/sex|sex|gender|mrn|medical record|record no|account|acct|accession|specimen id|address|street|city|zip|phone|tel|fax|e-?mail|ssn|social security|insurance|member id|policy|physician|doctor|ordering|provider|npi|client)\b/i;
-  return text
-    .split(/\r?\n/)
-    .filter((line) => !identifying.test(line))
-    .join("\n")
+  const lines = text.split(/\r?\n/);
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!IDENTIFYING.test(line)) { kept.push(line); continue; }
+    // PDF text often puts a label on its own line ("PATIENT NAME") and the value on the next: drop both.
+    if (!/\d|:\s*\S/.test(line) && line.replace(new RegExp(IDENTIFYING.source, "gi"), "").replace(/[^a-z0-9]/gi, "").length <= 4) i++;
+  }
+  return kept.join("\n")
     .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "[email]")
     // phone-shaped only (e.g. +1 512 555 0100, (512) 555-0100); lab values like "4.2 3.5-5.2" must survive
     .replace(/(?<![\d.])(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]?\d{3}[ .-]\d{4}(?![\d.])/g, "[number]")
+    .replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b|\b(?:19|20)\d{2}-\d{2}-\d{2}\b/g, "[date]")
     .slice(0, 6000);
 }
 
-export interface AiLabCandidate { biomarker: string; value: string; unit: string | null; ref_text: string | null; line: string }
+export interface AiLabCandidate { biomarker: string; value: string; unit: string | null; ref_text: string | null }
 
 const squash = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * Keeps only AI-proposed values that are literally present in the report: the quoted line must exist in the
- * text and contain the value (and the range, if given). Skips markers the rule-based reader already found.
+ * Keeps only AI-proposed values that are literally present in the report: some line must contain the test name,
+ * the value as a whole number token, and the printed range if one was given. That line becomes raw_line.
+ * Skips lines and names the rule-based reader already found.
  */
 export function validateAiLabValues(text: string, candidates: AiLabCandidate[], known: LabValue[]): LabValue[] {
-  const haystack = squash(text);
-  const seen = new Set(known.map((k) => squash(k.biomarker)));
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const seenLines = new Set(known.map((k) => squash(k.raw_line)));
+  const seenNames = new Set(known.map((k) => squash(k.biomarker)));
   const out: LabValue[] = [];
   for (const c of candidates.slice(0, 40)) {
-    if (!c || typeof c.biomarker !== "string" || typeof c.value !== "string" || typeof c.line !== "string") continue;
-    const line = squash(c.line);
-    const name = c.biomarker.trim().slice(0, 60);
-    if (!line || !haystack.includes(line)) continue;
-    if (!line.includes(squash(c.value))) continue;
-    if (c.ref_text && !line.includes(squash(c.ref_text))) continue;
-    if (seen.has(squash(name))) continue;
-    seen.add(squash(name));
-    const unit = c.unit?.trim() || null;
-    const ref_text = c.ref_text?.trim() || null;
-    const assessed = assessLabValue(c.value.trim(), unit, ref_text);
+    if (!c || typeof c.biomarker !== "string" || typeof c.value !== "string") continue;
+    const name = c.biomarker.trim().slice(0, 60), value = c.value.trim().slice(0, 20);
+    const ref_text = typeof c.ref_text === "string" && c.ref_text.trim() ? c.ref_text.trim().slice(0, 30) : null;
+    const unit = typeof c.unit === "string" && c.unit.trim() ? c.unit.trim().slice(0, 20) : null;
+    if (!name || !value || seenNames.has(squash(name))) continue;
+    const token = new RegExp(`(?<![\\d.])${escape(value)}(?![\\d.])`);
+    const line = lines.find((l) => squash(l).includes(squash(name)) && token.test(l) && (!ref_text || squash(l).includes(squash(ref_text))));
+    if (!line || seenLines.has(squash(line))) continue;
+    seenLines.add(squash(line)); seenNames.add(squash(name));
+    const assessed = assessLabValue(value, unit, ref_text);
     out.push({
-      id: `ai-${squash(name).replace(/[^a-z0-9]+/g, "-")}-${out.length}`, biomarker: name, raw_line: c.line.trim(), value: c.value.trim(), unit, ref_text,
+      id: `ai-${squash(name).replace(/[^a-z0-9]+/g, "-")}-${out.length}`, biomarker: name, raw_line: line, value, unit, ref_text,
       ...assessed, issues: ["Found by AI: check against your report", ...assessed.issues], confidence: Math.min(0.6, assessed.confidence),
     });
   }

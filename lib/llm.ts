@@ -168,11 +168,11 @@ export async function aiStatus(): Promise<{ provider: string; model: string; ok:
 const LAB_PROVIDERS: Provider["name"][] = ["groq", "anthropic"];
 export const labAiEnabled = () => providers().some((p) => LAB_PROVIDERS.includes(p.name));
 
-/** Finds lab values in redacted report text. Every result is re-validated against the text by the caller. */
-export async function aiLabExtract(redactedText: string): Promise<{ biomarker: string; value: string; unit: string | null; ref_text: string | null; line: string }[] | null> {
-  const out = await chatJSON<{ markers?: { biomarker: string; value: string; unit: string | null; ref_text: string | null; line: string }[] }>(
-    "You extract laboratory test results from report text. Copy values exactly. Reply with JSON only.",
-    `Report text:\n"""${redactedText}"""\n\nReturn {"markers":[{"biomarker":"test name as printed","value":"result exactly as printed","unit":"unit as printed or null","ref_text":"reference range exactly as printed or null","line":"the full report line copied character for character"}]}.\nRules: only real lab analytes (blood, urine, hormones, vitamins, lipids, etc.); copy, never compute or convert; if a range is not printed use null; skip headers, comments and anything about the person; at most 40 markers.`,
+/** Finds lab values in redacted report text that the rule-based reader missed. The caller re-checks each against the text. */
+export async function aiLabExtract(redactedText: string, alreadyRead: string[]): Promise<{ biomarker: string; value: string; unit: string | null; ref_text: string | null }[] | null> {
+  const out = await chatJSON<{ markers?: { biomarker: string; value: string; unit: string | null; ref_text: string | null }[] }>(
+    "You extract laboratory test results from report text. Copy values exactly as printed. Reply with JSON only.",
+    `Report text:\n"""${redactedText}"""\n\nAlready read, skip these: ${alreadyRead.slice(0, 40).join("; ") || "none"}.\nReturn {"markers":[{"biomarker":"test name exactly as printed","value":"result exactly as printed","unit":"unit as printed or null","ref_text":"reference range exactly as printed or null"}]}.\nRules: only real lab analytes (blood, urine, hormones, vitamins, lipids, etc.) that are NOT already read; copy, never compute or convert; skip the H/L flag; if no range is printed use null; skip headers, comments and anything about the person; at most 30 markers.`,
     30_000, LAB_PROVIDERS,
   );
   return Array.isArray(out?.markers) ? out!.markers : null;
@@ -190,7 +190,7 @@ export async function aiLabExplain(markers: { biomarker: string; value: string; 
     30_000, LAB_PROVIDERS,
   );
   if (!out) return null;
-  const items = (Array.isArray(out.items) ? out.items : []).filter((i) => i && typeof i.biomarker === "string" && typeof i.meaning === "string" && labSafe(i.meaning)).map((i) => ({ biomarker: i.biomarker.slice(0, 60), meaning: i.meaning.slice(0, 240) }));
+  const items = (Array.isArray(out.items) ? out.items : []).filter((i) => i && typeof i.biomarker === "string" && typeof i.meaning === "string" && labSafe(i.meaning)).map((i) => ({ biomarker: i.biomarker.slice(0, 60), meaning: (i.meaning.charAt(0).toUpperCase() + i.meaning.slice(1)).slice(0, 240) }));
   const questions = (Array.isArray(out.questions) ? out.questions : []).filter((q) => typeof q === "string" && labSafe(q)).map((q) => q.slice(0, 200)).slice(0, 5);
   return { items, questions };
 }
