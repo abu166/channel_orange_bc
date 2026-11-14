@@ -30,7 +30,13 @@ async function callOnce(p: Provider, system: string, user: string, timeoutMs: nu
           ...(p.name === "groq" || p.name === "openrouter" ? { response_format: { type: "json_object" } } : {}),
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
         }) });
-  if (!res.ok) throw new Error(`LLM ${res.status}`);
+  if (!res.ok) {
+    // Log status + provider message only (never the key or user content) so failures are diagnosable.
+    const detail = await res.text().catch(() => "");
+    const msg = detail.match(/"message"\s*:\s*"([^"]{0,200})/)?.[1] ?? "";
+    console.warn(`[llm] ${p.name}:${p.model} HTTP ${res.status} ${msg}`);
+    throw new Error(`LLM ${res.status}: ${msg}`);
+  }
   const data = await res.json();
   return p.kind === "anthropic" ? data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "" : data?.choices?.[0]?.message?.content ?? "";
 }
@@ -82,4 +88,16 @@ Rules: judge the exact outcome claimed (for "prevents" claims judge incidence/ri
   }
   const clean = (s: unknown, max: number) => (typeof s === "string" && s.length > 3 && s.length < max ? s.trim() : null);
   return { stances, reasons, bottomLine: clean(out.bottom_line, 200), explainer: clean(out.explainer, 700) };
+}
+
+/** Health probe for /api/v1/ai/status: one tiny JSON call, reports provider, model and the provider's error text. */
+export async function aiStatus(): Promise<{ provider: string; model: string; ok: boolean; error: string | null }> {
+  const p = provider();
+  if (!p) return { provider: "none", model: "none", ok: false, error: "No AI key configured" };
+  try {
+    const text = await callOnce(p, "Reply with JSON only.", 'Return {"ok":true} as JSON.', 10_000);
+    return { provider: p.name, model: p.model, ok: /"ok"\s*:\s*true/.test(text), error: null };
+  } catch (e) {
+    return { provider: p.name, model: p.model, ok: false, error: e instanceof Error ? e.message : "unknown error" };
+  }
 }
